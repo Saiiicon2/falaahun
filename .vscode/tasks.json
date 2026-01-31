@@ -1,0 +1,66 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Frontend Dev Server",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "dev"],
+      "cwd": "${workspaceFolder}/frontend",
+      "problemMatcher": [],
+      "isBackground": true,
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "panel": "new",
+        "reveal": "always"
+      }
+    },
+    {
+      "label": "Backend Dev Server",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "dev"],
+      "cwd": "${workspaceFolder}/backend",
+      "problemMatcher": [],
+      "isBackground": true,
+      "group": "build",
+      "presentation": {
+        "panel": "new",
+        "reveal": "always"
+      }
+    },
+    {
+      "label": "Build Frontend",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build"],
+      "cwd": "${workspaceFolder}/frontend",
+      "problemMatcher": [],
+      "group": "build"
+    },
+    {
+      "label": "Build Backend",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build"],
+      "cwd": "${workspaceFolder}/backend",
+      "problemMatcher": [],
+      "group": "build"
+    },
+    {
+      "label": "Run All Dev Servers",
+      "type": "shell",
+      "command": "echo 'Starting both servers...'",
+      "isBackground": true,
+      "dependsOn": ["Backend Dev Server", "Frontend Dev Server"],
+      "dependsOrder": "parallel",
+      "presentation": {
+        "panel": "new",
+        "reveal": "always"
+      }
+    }
+  ]
+}
