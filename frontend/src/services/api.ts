@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-const API_URL = process.env.NODE_ENV === 'production' 
+const API_URL = import.meta.env.MODE === 'production' 
   ? 'https://falaahun.onrender.com'
   : 'http://localhost:3000'
 
