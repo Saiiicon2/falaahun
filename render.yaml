@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: falaahun-api
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: DATABASE_URL
+        scope: run_and_build
+      - key: JWT_SECRET
+        scope: run_and_build
