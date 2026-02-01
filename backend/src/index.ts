@@ -24,6 +24,7 @@ const PORT = process.env.PORT || 3000
 app.use(cors({
   origin: [
     'http://localhost:5173',
+    'https://falaahun.onrender.com',
     'https://falaahun-1.onrender.com',
     process.env.CLIENT_URL
   ].filter(Boolean),
