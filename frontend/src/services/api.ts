@@ -1,6 +1,8 @@
 import axios from 'axios'
 
-const API_URL = 'http://localhost:3000'
+const API_URL = process.env.NODE_ENV === 'production' 
+  ? 'https://falaahun.onrender.com'
+  : 'http://localhost:3000'
 
 const api = axios.create({
   baseURL: API_URL,
