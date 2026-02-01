@@ -149,20 +149,6 @@ CREATE TABLE IF NOT EXISTS deals (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Pledges table
-CREATE TABLE IF NOT EXISTS pledges (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  deal_id UUID NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
-  donor_name VARCHAR(255) NOT NULL,
-  donor_email VARCHAR(255),
-  amount DECIMAL(15,2) NOT NULL,
-  pledge_date TIMESTAMP,
-  status VARCHAR(50) DEFAULT 'pending',
-  notes TEXT,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
 -- Call logs table
 CREATE TABLE IF NOT EXISTS call_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -242,14 +228,6 @@ CREATE TABLE IF NOT EXISTS integration_sync_logs (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Indexes for performance
-CREATE INDEX IF NOT EXISTS idx_contacts_hubspot ON contacts(hubspot_contact_id);
-CREATE INDEX IF NOT EXISTS idx_contacts_sync_status ON contacts(hubspot_sync_status);
-CREATE INDEX IF NOT EXISTS idx_pledges_hubspot ON pledges(hubspot_deal_id);
-CREATE INDEX IF NOT EXISTS idx_pledges_sync_status ON pledges(hubspot_sync_status);
-CREATE INDEX IF NOT EXISTS idx_pledges_contact ON pledges(contact_id);
-CREATE INDEX IF NOT EXISTS idx_sync_logs_integration ON integration_sync_logs(integration_name);
-CREATE INDEX IF NOT EXISTS idx_sync_logs_entity ON integration_sync_logs(entity_type, entity_id);
 -- Teams table
 CREATE TABLE IF NOT EXISTS teams (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -268,7 +246,14 @@ CREATE TABLE IF NOT EXISTS team_members (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create indexes for better performance
+-- Indexes for performance
+CREATE INDEX IF NOT EXISTS idx_contacts_hubspot ON contacts(hubspot_contact_id);
+CREATE INDEX IF NOT EXISTS idx_contacts_sync_status ON contacts(hubspot_sync_status);
+CREATE INDEX IF NOT EXISTS idx_pledges_hubspot ON pledges(hubspot_deal_id);
+CREATE INDEX IF NOT EXISTS idx_pledges_sync_status ON pledges(hubspot_sync_status);
+CREATE INDEX IF NOT EXISTS idx_pledges_contact ON pledges(contact_id);
+CREATE INDEX IF NOT EXISTS idx_sync_logs_integration ON integration_sync_logs(integration_name);
+CREATE INDEX IF NOT EXISTS idx_sync_logs_entity ON integration_sync_logs(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_contacts_organization ON contacts(organization_id);
 CREATE INDEX IF NOT EXISTS idx_activities_contact ON activities(contact_id);
 CREATE INDEX IF NOT EXISTS idx_deals_project ON deals(project_id);
