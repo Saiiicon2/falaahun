@@ -21,13 +21,18 @@ const app = express()
 const PORT = process.env.PORT || 3000
 
 // Middleware
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://falaahun.onrender.com',
+  'https://falaahun-1.onrender.com'
+]
+
+if (process.env.CLIENT_URL) {
+  allowedOrigins.push(process.env.CLIENT_URL)
+}
+
 app.use(cors({
-  origin: [
-    'http://localhost:5173',
-    'https://falaahun.onrender.com',
-    'https://falaahun-1.onrender.com',
-    process.env.CLIENT_URL
-  ].filter(Boolean),
+  origin: allowedOrigins,
   credentials: true
 }))
 app.use(express.json())
