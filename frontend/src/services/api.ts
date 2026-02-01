@@ -1,7 +1,7 @@
 import axios from 'axios'
 
-// Use production API URL - change to localhost:3000 for local development
-const API_URL = 'https://falaahun.onrender.com'
+// Use environment variable or fallback to production API URL
+const API_URL = import.meta.env.VITE_API_URL || 'https://falaahun.onrender.com'
 
 const api = axios.create({
   baseURL: API_URL,
