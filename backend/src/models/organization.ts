@@ -22,7 +22,7 @@ interface Organization {
 
 const mockOrganizations: Organization[] = [
   {
-    id: '1',
+    id: '00000000-0000-0000-0000-000000000001',
     name: 'Default Organization',
     email: 'org@falaahun.org',
     created_at: new Date(),
@@ -35,7 +35,8 @@ const organizationModel = {
     try {
       const result = await pool.query('SELECT * FROM organizations ORDER BY created_at DESC')
       return result.rows
-    } catch (error) {
+    } catch (error: any) {
+      console.error('❌ Failed to fetch organizations from database:', error?.message)
       console.log('Using mock storage for organizations')
       return mockOrganizations
     }

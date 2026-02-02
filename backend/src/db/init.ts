@@ -2,6 +2,9 @@ import pool from './connection'
 
 const initializeDatabase = async () => {
   try {
+    // Ensure UUID generation is available (Render Postgres typically has this, but keep it safe).
+    await pool.query('CREATE EXTENSION IF NOT EXISTS pgcrypto;')
+
     // Check connection
     const result = await pool.query('SELECT NOW()')
     console.log('✅ Database connection successful')
@@ -55,6 +58,34 @@ const initializeDatabase = async () => {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+    `)
+
+    // Migrations: CREATE TABLE IF NOT EXISTS won't update existing tables.
+    // Keep these idempotent so deployments can evolve schema safely.
+    await pool.query('ALTER TABLE contacts ADD COLUMN IF NOT EXISTS organization_id UUID;')
+    await pool.query('ALTER TABLE contacts ADD COLUMN IF NOT EXISTS project_id UUID;')
+    await pool.query("ALTER TABLE contacts ADD COLUMN IF NOT EXISTS lead_status VARCHAR(50) DEFAULT 'lead';")
+    await pool.query('ALTER TABLE contacts ADD COLUMN IF NOT EXISTS assigned_to UUID;')
+    await pool.query('ALTER TABLE contacts ADD COLUMN IF NOT EXISTS labels VARCHAR(255)[];')
+    await pool.query("ALTER TABLE contacts ADD COLUMN IF NOT EXISTS custom_fields JSONB DEFAULT '{}';")
+    await pool.query('ALTER TABLE contacts ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMP;')
+    await pool.query('ALTER TABLE contacts ADD COLUMN IF NOT EXISTS hubspot_contact_id VARCHAR(50);')
+    await pool.query("ALTER TABLE contacts ADD COLUMN IF NOT EXISTS hubspot_sync_status VARCHAR(50) DEFAULT 'pending';")
+    await pool.query('ALTER TABLE contacts ADD COLUMN IF NOT EXISTS hubspot_last_synced TIMESTAMP;')
+
+    await pool.query('ALTER TABLE organizations ADD COLUMN IF NOT EXISTS email VARCHAR(255);')
+    await pool.query('ALTER TABLE organizations ADD COLUMN IF NOT EXISTS phone VARCHAR(20);')
+    await pool.query('ALTER TABLE organizations ADD COLUMN IF NOT EXISTS address TEXT;')
+    await pool.query('ALTER TABLE organizations ADD COLUMN IF NOT EXISTS website VARCHAR(255);')
+    await pool.query('ALTER TABLE organizations ADD COLUMN IF NOT EXISTS description TEXT;')
+    await pool.query('ALTER TABLE organizations ADD COLUMN IF NOT EXISTS logo_url VARCHAR(500);')
+    await pool.query('ALTER TABLE organizations ADD COLUMN IF NOT EXISTS logo_key VARCHAR(255);')
+
+    // Seed a default org so the UI has a valid UUID to select.
+    await pool.query(`
+      INSERT INTO organizations (id, name, email, created_at, updated_at)
+      SELECT gen_random_uuid(), 'Default Organization', 'org@falaahun.org', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+      WHERE NOT EXISTS (SELECT 1 FROM organizations);
     `)
     
     await pool.query(`

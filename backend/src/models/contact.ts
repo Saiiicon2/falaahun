@@ -5,6 +5,11 @@ import { Contact } from '../types'
 // In-memory store as fallback when database is unavailable
 const mockContacts: any[] = []
 
+const isUuid = (value: unknown): value is string => {
+  if (typeof value !== 'string') return false
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+}
+
 export const contactModel = {
   async getAll(limit = 50, offset = 0) {
     try {
@@ -36,16 +41,21 @@ export const contactModel = {
 
   async create(data: Partial<Contact> & { leadStatus?: string; assignedTo?: string; project?: string }) {
     const id = uuidv4()
+
+    const organizationId = isUuid(data.company) ? data.company : null
+    const projectId = isUuid(data.project) ? data.project : null
+    const assignedTo = isUuid(data.assignedTo) ? data.assignedTo : null
+
     const contact = {
       id,
       first_name: data.firstName,
       last_name: data.lastName,
       email: data.email,
       phone: data.phone,
-      organization_id: data.company,
-      project_id: data.project,
+      organization_id: organizationId,
+      project_id: projectId,
       lead_status: data.leadStatus || 'lead',
-      assigned_to: data.assignedTo,
+      assigned_to: assignedTo,
       labels: data.labels || [],
       custom_fields: data.customFields || {},
       created_at: new Date(),
@@ -64,10 +74,10 @@ export const contactModel = {
           data.lastName,
           data.email,
           data.phone,
-          data.company,
-          data.project,
+          organizationId,
+          projectId,
           data.leadStatus || 'lead',
-          data.assignedTo,
+          assignedTo,
           data.labels || [],
           JSON.stringify(data.customFields || {})
         ]
@@ -76,6 +86,12 @@ export const contactModel = {
       return result.rows[0]
     } catch (error: any) {
       console.error('❌ Failed to insert contact:', error.message)
+
+      // In production, failing inserts should surface so we don't “pretend” data was saved.
+      if (process.env.NODE_ENV === 'production') {
+        throw error
+      }
+
       console.log('📝 Storing contact in mock storage')
       mockContacts.push(contact)
       return contact
