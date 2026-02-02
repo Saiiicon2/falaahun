@@ -3,6 +3,8 @@ import axios from 'axios'
 // Use environment variable or fallback to production API URL
 const API_URL = import.meta.env.VITE_API_URL || 'https://falaahun.onrender.com'
 
+console.log('API URL:', API_URL) // Debug log
+
 const api = axios.create({
   baseURL: API_URL,
 })
