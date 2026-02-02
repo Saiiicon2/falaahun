@@ -35,6 +35,18 @@ const initializeDatabase = async () => {
     `)
     
     await pool.query(`
+      CREATE TABLE IF NOT EXISTS organizations (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(255) NOT NULL,
+        logo_url TEXT,
+        primary_color VARCHAR(7) DEFAULT '#1E40AF',
+        secondary_color VARCHAR(7) DEFAULT '#3B82F6',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `)
+    
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS activities (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         contact_id UUID NOT NULL,
@@ -88,14 +100,14 @@ const initializeDatabase = async () => {
     
     console.log('✅ Database schema initialized successfully')
   } catch (error: any) {
-    console.error('⚠️  Warning: Database initialization encountered an issue')
-    console.error('This is normal if PostgreSQL is not installed.')
-    console.error('Error:', error.message)
-    console.error('\nTo set up PostgreSQL:')
-    console.error('1. Install PostgreSQL from https://www.postgresql.org/download/')
-    console.error('2. Create database: psql -U postgres -c "CREATE DATABASE dawah_crm;"')
-    console.error('3. Update .env with your database credentials')
-    console.error('4. Restart the server')
+    console.error('❌ ERROR: Database initialization failed!')
+    console.error('Error message:', error.message)
+    console.error('Error code:', error.code)
+    console.error('Full error:', error)
+    console.error('\nIf using Render PostgreSQL, check:')
+    console.error('1. DATABASE_URL is correctly set')
+    console.error('2. Database exists and is accessible')
+    console.error('3. Check Render logs for connection issues')
   }
 }
 
