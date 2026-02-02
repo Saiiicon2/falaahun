@@ -27,8 +27,15 @@ const initializeDatabase = async () => {
         email VARCHAR(255),
         phone VARCHAR(20),
         organization_id UUID,
+        project_id UUID,
+        lead_status VARCHAR(50) DEFAULT 'lead',
+        assigned_to UUID,
         labels VARCHAR(255)[],
         custom_fields JSONB DEFAULT '{}',
+        last_activity_at TIMESTAMP,
+        hubspot_contact_id VARCHAR(50),
+        hubspot_sync_status VARCHAR(50) DEFAULT 'pending',
+        hubspot_last_synced TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
@@ -38,9 +45,13 @@ const initializeDatabase = async () => {
       CREATE TABLE IF NOT EXISTS organizations (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         name VARCHAR(255) NOT NULL,
-        logo_url TEXT,
-        primary_color VARCHAR(7) DEFAULT '#1E40AF',
-        secondary_color VARCHAR(7) DEFAULT '#3B82F6',
+        email VARCHAR(255),
+        phone VARCHAR(20),
+        address TEXT,
+        website VARCHAR(255),
+        description TEXT,
+        logo_url VARCHAR(500),
+        logo_key VARCHAR(255),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
