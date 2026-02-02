@@ -15,13 +15,8 @@ function IntegrationSettings() {
 
   const fetchIntegrationStatus = async () => {
     try {
-      const response = await fetch('http://localhost:3000/integrations/status', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-      })
-      const data = await response.json()
-      setIntegrations(data.data || [])
+      const response = await integrationService.getStatus()
+      setIntegrations(response.data.data || [])
     } catch (err: any) {
       setError('Failed to fetch integration status')
     }
@@ -33,17 +28,9 @@ function IntegrationSettings() {
     setSuccess('')
 
     try {
-      const response = await fetch('http://localhost:3000/integrations/hubspot/test', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-      })
+      const response = await integrationService.testHubSpot()
 
-      const data = await response.json()
-
-      if (data.success) {
+      if (response.data.success) {
         setSuccess('✓ HubSpot connection successful!')
         await fetchIntegrationStatus()
       } else {
