@@ -194,4 +194,3 @@ export const integrationService = {
 }
 
 export default api
-export default api
