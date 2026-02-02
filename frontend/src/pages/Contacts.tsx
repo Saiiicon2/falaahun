@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Search, Edit2, Trash2 } from 'lucide-react'
-import { contactService } from '../services/api'
+import { contactService, projectService, organizationService } from '../services/api'
 
 interface Organization {
   id: string
