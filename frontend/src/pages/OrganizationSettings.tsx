@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Upload, Trash2, Settings, AlertCircle, CheckCircle } from 'lucide-react'
+import { organizationService } from '../services/api'
 
 interface Organization {
   id: string
@@ -50,15 +51,10 @@ function OrganizationSettings() {
   const fetchOrganizations = async () => {
     try {
       setLoading(true)
-      const response = await fetch('http://localhost:3000/organizations', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-      })
-      const data = await response.json()
-      if (data.success && data.data.length > 0) {
-        setOrganizations(data.data)
-        setSelectedOrg(data.data[0])
+      const response = await organizationService.getAll()
+      if (response.data.success && response.data.data.length > 0) {
+        setOrganizations(response.data.data)
+        setSelectedOrg(response.data.data[0])
       }
     } catch (err: any) {
       setError('Failed to fetch organizations')
@@ -78,29 +74,18 @@ function OrganizationSettings() {
     formDataObj.append('logo', file)
 
     try {
-      const response = await fetch(
-        `http://localhost:3000/organizations/${selectedOrg.id}/logo`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-          },
-          body: formDataObj,
-        }
-      )
+      const response = await organizationService.uploadLogo(selectedOrg.id, file)
 
-      const data = await response.json()
-
-      if (data.success) {
+      if (response.data.success) {
         setSuccess('Logo uploaded successfully!')
         const updatedOrgs = organizations.map((org) =>
-          org.id === selectedOrg.id ? data.data : org
+          org.id === selectedOrg.id ? response.data.data : org
         )
         setOrganizations(updatedOrgs)
-        setSelectedOrg(data.data)
+        setSelectedOrg(response.data.data)
         setTimeout(() => setSuccess(''), 3000)
       } else {
-        setError(data.message || 'Failed to upload logo')
+        setError(response.data.message || 'Failed to upload logo')
       }
     } catch (err: any) {
       setError('Error uploading logo')
@@ -117,28 +102,18 @@ function OrganizationSettings() {
     setSuccess('')
 
     try {
-      const response = await fetch(
-        `http://localhost:3000/organizations/${selectedOrg.id}/logo`,
-        {
-          method: 'DELETE',
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-          },
-        }
-      )
+      const response = await organizationService.deleteLogo(selectedOrg.id)
 
-      const data = await response.json()
-
-      if (data.success) {
+      if (response.data.success) {
         setSuccess('Logo deleted successfully!')
         const updatedOrgs = organizations.map((org) =>
-          org.id === selectedOrg.id ? data.data : org
+          org.id === selectedOrg.id ? response.data.data : org
         )
         setOrganizations(updatedOrgs)
-        setSelectedOrg(data.data)
+        setSelectedOrg(response.data.data)
         setTimeout(() => setSuccess(''), 3000)
       } else {
-        setError(data.message || 'Failed to delete logo')
+        setError(response.data.message || 'Failed to delete logo')
       }
     } catch (err: any) {
       setError('Error deleting logo')
@@ -165,30 +140,18 @@ function OrganizationSettings() {
     setSuccess('')
 
     try {
-      const response = await fetch(
-        `http://localhost:3000/organizations/${selectedOrg.id}`,
-        {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-          },
-          body: JSON.stringify(formData),
-        }
-      )
+      const response = await organizationService.update(selectedOrg.id, formData)
 
-      const data = await response.json()
-
-      if (data.success) {
+      if (response.data.success) {
         setSuccess('Organization updated successfully!')
         const updatedOrgs = organizations.map((org) =>
-          org.id === selectedOrg.id ? data.data : org
+          org.id === selectedOrg.id ? response.data.data : org
         )
         setOrganizations(updatedOrgs)
-        setSelectedOrg(data.data)
+        setSelectedOrg(response.data.data)
         setTimeout(() => setSuccess(''), 3000)
       } else {
-        setError(data.message || 'Failed to update organization')
+        setError(response.data.message || 'Failed to update organization')
       }
     } catch (err: any) {
       setError('Error updating organization')

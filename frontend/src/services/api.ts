@@ -169,4 +169,29 @@ export const scheduleService = {
     api.get(`/schedules/${id}`)
 }
 
+export const organizationService = {
+  getAll: () => api.get('/organizations'),
+  
+  getOne: (id: string) => api.get(`/organizations/${id}`),
+  
+  update: (id: string, data: any) => api.put(`/organizations/${id}`, data),
+  
+  uploadLogo: (id: string, file: File) => {
+    const formData = new FormData()
+    formData.append('logo', file)
+    return api.post(`/organizations/${id}/logo`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  },
+  
+  deleteLogo: (id: string) => api.delete(`/organizations/${id}/logo`)
+}
+
+export const integrationService = {
+  getStatus: () => api.get('/integrations/status'),
+  
+  testHubSpot: () => api.post('/integrations/hubspot/test')
+}
+
+export default api
 export default api

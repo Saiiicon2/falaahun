@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { integrationService } from '../services/api'
 import { Settings, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react'
 
 function IntegrationSettings() {

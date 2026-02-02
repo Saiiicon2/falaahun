@@ -42,14 +42,9 @@ function Contacts() {
 
   const fetchProjects = async () => {
     try {
-      const response = await fetch('http://localhost:3000/projects', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-      })
-      const data = await response.json()
-      if (data.success && data.data) {
-        setProjects(data.data)
+      const response = await projectService.getAll()
+      if (response.data.success && response.data.data) {
+        setProjects(response.data.data)
       }
     } catch (error) {
       console.error('Error fetching projects:', error)
@@ -58,14 +53,9 @@ function Contacts() {
 
   const fetchOrganizations = async () => {
     try {
-      const response = await fetch('http://localhost:3000/organizations', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-      })
-      const data = await response.json()
-      if (data.success && data.data) {
-        setOrganizations(data.data)
+      const response = await organizationService.getAll()
+      if (response.data.success && response.data.data) {
+        setOrganizations(response.data.data)
       }
     } catch (error) {
       console.error('Error fetching organizations:', error)

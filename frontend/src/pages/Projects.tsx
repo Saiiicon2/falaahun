@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Plus, Trash2, TrendingUp, ChevronDown, ChevronUp } from 'lucide-react'
-import { projectService } from '../services/api'
+import { projectService, contactService } from '../services/api'
 
 interface Project {
   id: string
@@ -90,15 +90,11 @@ function Projects() {
 
   const fetchProjectContacts = async (projectId: string) => {
     try {
-      const response = await fetch('http://localhost:3000/contacts', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-      })
-      const data = await response.json()
-      if (data.success && data.data) {
+      const response = await contactService.getAll()
+      if (response.data.success && response.data.data) {
         // Filter contacts that belong to this project
-        const linkedContacts = data.data.filter((contact: any) => contact.project_id === projectId)
+        const allContacts = response.data.data.contacts || response.data.data
+        const linkedContacts = allContacts.filter((contact: any) => contact.project_id === projectId)
         setProjectContacts(prev => ({
           ...prev,
           [projectId]: linkedContacts
