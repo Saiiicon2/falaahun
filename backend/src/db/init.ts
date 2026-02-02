@@ -110,9 +110,20 @@ const initializeDatabase = async () => {
         budget DECIMAL(15,2),
         raised DECIMAL(15,2) DEFAULT 0,
         status VARCHAR(50) DEFAULT 'active',
+        occurrence VARCHAR(50) DEFAULT 'one-time',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+    `)
+
+    // Migrations for existing DBs
+    await pool.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS occurrence VARCHAR(50) DEFAULT 'one-time';")
+
+    // Seed a default project (helps dropdowns; safe/idempotent)
+    await pool.query(`
+      INSERT INTO projects (id, name, description, budget, raised, status, occurrence, created_at, updated_at)
+      SELECT gen_random_uuid(), 'General Fundraising', 'Default project', 0, 0, 'active', 'one-time', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+      WHERE NOT EXISTS (SELECT 1 FROM projects);
     `)
     
     await pool.query(`

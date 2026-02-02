@@ -56,6 +56,10 @@ export const projectModel = {
       )
       return result.rows[0]
     } catch (error) {
+      if (process.env.NODE_ENV === 'production') {
+        throw error
+      }
+
       console.log('📝 Storing project in mock storage')
       mockProjects.push(project)
       return project
