@@ -8,12 +8,15 @@ const mockContacts: any[] = []
 export const contactModel = {
   async getAll(limit = 50, offset = 0) {
     try {
+      console.log('🔍 Fetching contacts from database...')
       const result = await pool.query(
         'SELECT * FROM contacts ORDER BY created_at DESC LIMIT $1 OFFSET $2',
         [limit, offset]
       )
+      console.log(`✅ Found ${result.rows.length} contacts in database`)
       return result.rows
-    } catch (error) {
+    } catch (error: any) {
+      console.error('❌ Database query failed:', error.message)
       console.log('📝 Using mock contact data (database unavailable)')
       return mockContacts.slice(offset, offset + limit)
     }
@@ -50,6 +53,7 @@ export const contactModel = {
     }
     
     try {
+      console.log('💾 Inserting contact into database...', contact)
       const result = await pool.query(
         `INSERT INTO contacts (id, first_name, last_name, email, phone, organization_id, project_id, lead_status, assigned_to, labels, custom_fields)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
@@ -68,8 +72,10 @@ export const contactModel = {
           JSON.stringify(data.customFields || {})
         ]
       )
+      console.log('✅ Contact inserted successfully:', result.rows[0])
       return result.rows[0]
-    } catch (error) {
+    } catch (error: any) {
+      console.error('❌ Failed to insert contact:', error.message)
       console.log('📝 Storing contact in mock storage')
       mockContacts.push(contact)
       return contact
