@@ -89,19 +89,23 @@ function Contacts() {
   const handleAddContact = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
+      console.log('Creating contact with data:', formData)
       const labels = formData.labels.split(',').map(l => l.trim()).filter(l => l)
-      await contactService.create({
+      const response = await contactService.create({
         ...formData,
         labels,
         leadStatus: formData.leadStatus,
         company: formData.company || undefined,
         project: formData.project || undefined
       })
+      console.log('Contact created successfully:', response.data)
       setFormData({ firstName: '', lastName: '', email: '', phone: '', labels: '', leadStatus: 'lead', company: '', project: '' })
       setShowForm(false)
       fetchContacts()
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error adding contact:', error)
+      console.error('Error response:', error.response?.data)
+      alert(`Failed to add contact: ${error.response?.data?.message || error.message}`)
     }
   }
 
