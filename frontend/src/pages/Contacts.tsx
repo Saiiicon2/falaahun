@@ -65,7 +65,10 @@ function Contacts() {
   const fetchContacts = async () => {
     try {
       const response = await contactService.getAll()
-      setContacts(response.data.data || [])
+      console.log('Fetched contacts response:', response.data)
+      const contactsData = response.data.data?.contacts || response.data.data || []
+      console.log('Setting contacts:', contactsData)
+      setContacts(contactsData)
     } catch (error) {
       console.error('Error fetching contacts:', error)
     } finally {
