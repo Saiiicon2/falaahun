@@ -6,7 +6,13 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
 declare global {
   namespace Express {
     interface Request {
-      user?: any
+      user?: {
+        id: string
+        email: string
+        role: string
+        organizationId?: string
+        membershipRole?: string
+      }
     }
   }
 }
@@ -19,7 +25,7 @@ export const authMiddleware = (req: Request, res: Response, next: NextFunction) 
       return res.status(401).json({ success: false, error: 'No token provided' })
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET)
+    const decoded = jwt.verify(token, JWT_SECRET) as Express.Request['user']
     req.user = decoded
     next()
   } catch (error: any) {

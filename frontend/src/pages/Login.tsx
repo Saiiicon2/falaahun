@@ -10,7 +10,8 @@ function Login() {
   const [formData, setFormData] = useState({
     email: 'demo@falaahun.org',
     password: 'demo123456',
-    name: 'Demo User'
+    name: 'Demo User',
+    organizationName: 'Demo Organization'
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -22,15 +23,22 @@ function Login() {
       if (isLogin) {
         const response = await authService.login(formData.email, formData.password)
         localStorage.setItem('token', response.data.token)
-        localStorage.setItem('user', JSON.stringify(response.data.user))
+        localStorage.setItem('user', JSON.stringify(response.data.data.user))
+        localStorage.setItem('organization', JSON.stringify(response.data.data.organization))
       } else {
-        const response = await authService.register(formData.email, formData.password, formData.name)
+        const response = await authService.register(
+          formData.email,
+          formData.password,
+          formData.name,
+          formData.organizationName
+        )
         localStorage.setItem('token', response.data.token)
-        localStorage.setItem('user', JSON.stringify(response.data.user))
+        localStorage.setItem('user', JSON.stringify(response.data.data.user))
+        localStorage.setItem('organization', JSON.stringify(response.data.data.organization))
       }
       window.location.href = '/'
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Authentication failed')
+      setError(err.response?.data?.error || err.response?.data?.message || 'Authentication failed')
     } finally {
       setLoading(false)
     }
@@ -59,6 +67,20 @@ function Login() {
                 placeholder="your@email.com"
               />
             </div>
+
+            {!isLogin && (
+              <div>
+                <label className="block text-white/70 text-sm font-medium mb-2">Organization Name</label>
+                <input
+                  type="text"
+                  required
+                  value={formData.organizationName}
+                  onChange={(e) => setFormData({ ...formData, organizationName: e.target.value })}
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-white/40 focus:outline-none focus:border-emerald-400/50 focus:ring-1 focus:ring-emerald-400/20 transition"
+                  placeholder="Your Organization"
+                />
+              </div>
+            )}
 
             {!isLogin && (
               <div>
@@ -97,7 +119,7 @@ function Login() {
               disabled={loading}
               className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-semibold py-3 rounded-lg hover:from-emerald-600 hover:to-emerald-700 transition disabled:opacity-50 mt-6"
             >
-              {loading ? 'Signing in...' : isLogin ? 'Sign In' : 'Create Account'}
+              {loading ? 'Submitting...' : isLogin ? 'Sign In' : 'Create Organization'}
             </button>
 
             <div className="relative py-4">

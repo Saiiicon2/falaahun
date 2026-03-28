@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Mail, Phone, Calendar, Clock, Trash2 } from 'lucide-react'
-import { contactService, activityService, callLogService, scheduleService, commentService } from '../services/api'
+import { contactService, activityService, callLogService, scheduleService, commentService, pledgeService } from '../services/api'
 
 function ContactDetail() {
   const { contactId } = useParams()
@@ -10,14 +10,17 @@ function ContactDetail() {
   const [activities, setActivities] = useState<any[]>([])
   const [callLogs, setCallLogs] = useState<any[]>([])
   const [schedules, setSchedules] = useState<any[]>([])
+  const [pledges, setPledges] = useState<any[]>([])
   const [comments, setComments] = useState<any[]>([])
   const [newComment, setNewComment] = useState('')
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'info' | 'emails' | 'comments' | 'calls' | 'schedules' | 'activity'>('info')
+  const [activeTab, setActiveTab] = useState<'info' | 'emails' | 'comments' | 'calls' | 'schedules' | 'pledges' | 'activity'>('info')
   const [showCallForm, setShowCallForm] = useState(false)
   const [showScheduleForm, setShowScheduleForm] = useState(false)
+  const [showPledgeForm, setShowPledgeForm] = useState(false)
   const [callForm, setCallForm] = useState({ duration: '', direction: 'inbound', status: 'completed', notes: '' })
   const [scheduleForm, setScheduleForm] = useState({ title: '', eventType: 'meeting', startTime: '', description: '' })
+  const [pledgeForm, setPledgeForm] = useState({ amount: '', type: 'donation', status: 'pending', expectedDate: '', notes: '' })
 
   useEffect(() => {
     fetchContactData()
@@ -27,12 +30,13 @@ function ContactDetail() {
     try {
       if (!contactId) return
       
-      const [contactRes, activitiesRes, callLogsRes, schedulesRes, commentsRes] = await Promise.all([
+      const [contactRes, activitiesRes, callLogsRes, schedulesRes, commentsRes, pledgesRes] = await Promise.all([
         contactService.getOne(contactId),
         activityService.getByContact(contactId),
         callLogService.getByContact(contactId),
         scheduleService.getByContact(contactId),
-        commentService.getByContact(contactId)
+        commentService.getByContact(contactId),
+        pledgeService.getAll({ contactId })
       ])
 
       setContact(contactRes.data.data)
@@ -40,6 +44,7 @@ function ContactDetail() {
       setCallLogs(callLogsRes.data.data || [])
       setSchedules(schedulesRes.data.data || [])
       setComments(commentsRes.data.data || [])
+      setPledges(pledgesRes.data.data || [])
     } catch (error) {
       console.error('Error fetching contact:', error)
     } finally {
@@ -121,6 +126,37 @@ function ContactDetail() {
     }
   }
 
+  const handleCreatePledge = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!contactId) return
+
+    const parsedAmount = Number(pledgeForm.amount)
+    if (Number.isNaN(parsedAmount) || parsedAmount <= 0) {
+      alert('Please enter a valid pledge amount.')
+      return
+    }
+
+    try {
+      await pledgeService.create({
+        contactId,
+        amount: parsedAmount,
+        type: pledgeForm.type,
+        status: pledgeForm.status,
+        expectedDate: pledgeForm.expectedDate || undefined,
+        notes: pledgeForm.notes,
+      })
+
+      setPledgeForm({ amount: '', type: 'donation', status: 'pending', expectedDate: '', notes: '' })
+      setShowPledgeForm(false)
+
+      const pledgesRes = await pledgeService.getAll({ contactId })
+      setPledges(pledgesRes.data.data || [])
+    } catch (error: any) {
+      console.error('Error creating pledge:', error)
+      alert('Error creating pledge: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
   if (loading) return <div className="p-8 text-center">Loading...</div>
   if (!contact) return <div className="p-8 text-center">Contact not found</div>
 
@@ -184,7 +220,7 @@ function ContactDetail() {
             {/* Tabs */}
             <div className="bg-white rounded-xl border border-slate-200">
               <div className="border-b border-slate-200 flex overflow-x-auto">
-                {(['info', 'emails', 'comments', 'calls', 'schedules', 'activity'] as const).map(tab => (
+                {(['info', 'emails', 'comments', 'calls', 'schedules', 'pledges', 'activity'] as const).map(tab => (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
@@ -478,6 +514,125 @@ function ContactDetail() {
                   </div>
                 )}
 
+                {activeTab === 'pledges' && (
+                  <div className="space-y-4">
+                    <button
+                      onClick={() => setShowPledgeForm(!showPledgeForm)}
+                      className="w-full px-4 py-2 bg-emerald-50 text-emerald-700 rounded-lg hover:bg-emerald-100 font-medium text-sm transition"
+                    >
+                      {showPledgeForm ? 'Cancel' : '+ Add Pledge / Donation'}
+                    </button>
+
+                    {showPledgeForm && (
+                      <form onSubmit={handleCreatePledge} className="bg-slate-50 rounded-lg p-4 space-y-3">
+                        <div>
+                          <label className="text-xs text-slate-600 font-medium">Amount</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={pledgeForm.amount}
+                            onChange={(e) => setPledgeForm({ ...pledgeForm, amount: e.target.value })}
+                            className="w-full border border-slate-200 rounded-lg px-3 py-2 mt-1"
+                            required
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-xs text-slate-600 font-medium">Type</label>
+                            <select
+                              value={pledgeForm.type}
+                              onChange={(e) => setPledgeForm({ ...pledgeForm, type: e.target.value })}
+                              className="w-full border border-slate-200 rounded-lg px-3 py-2 mt-1"
+                            >
+                              <option value="donation">Donation</option>
+                              <option value="pledge">Pledge</option>
+                              <option value="zakat">Zakat</option>
+                              <option value="sadaqah">Sadaqah</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-xs text-slate-600 font-medium">Status</label>
+                            <select
+                              value={pledgeForm.status}
+                              onChange={(e) => setPledgeForm({ ...pledgeForm, status: e.target.value })}
+                              className="w-full border border-slate-200 rounded-lg px-3 py-2 mt-1"
+                            >
+                              <option value="pending">Pending</option>
+                              <option value="received">Received</option>
+                              <option value="failed">Failed</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-xs text-slate-600 font-medium">Expected Date</label>
+                          <input
+                            type="date"
+                            value={pledgeForm.expectedDate}
+                            onChange={(e) => setPledgeForm({ ...pledgeForm, expectedDate: e.target.value })}
+                            className="w-full border border-slate-200 rounded-lg px-3 py-2 mt-1"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-slate-600 font-medium">Notes</label>
+                          <textarea
+                            value={pledgeForm.notes}
+                            onChange={(e) => setPledgeForm({ ...pledgeForm, notes: e.target.value })}
+                            placeholder="Optional note"
+                            className="w-full border border-slate-200 rounded-lg px-3 py-2 mt-1 resize-none"
+                            rows={3}
+                          />
+                        </div>
+                        <button
+                          type="submit"
+                          className="w-full bg-emerald-600 text-white py-2 rounded-lg hover:bg-emerald-700 font-medium text-sm"
+                        >
+                          Save Pledge
+                        </button>
+                      </form>
+                    )}
+
+                    {pledges.length === 0 ? (
+                      <p className="text-slate-500 text-center py-8">No pledges recorded for this contact yet</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {pledges.map((pledge: any) => (
+                          <div key={pledge.id} className="bg-slate-50 rounded-lg p-4">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-emerald-600 font-semibold">$</span>
+                                  <span className="font-semibold text-slate-900">
+                                    ${Number(pledge.amount || 0).toLocaleString()}
+                                  </span>
+                                  <span className="text-xs px-2 py-1 rounded bg-slate-200 text-slate-700 capitalize">
+                                    {pledge.type || 'donation'}
+                                  </span>
+                                  <span className={`text-xs px-2 py-1 rounded capitalize ${
+                                    pledge.status === 'received'
+                                      ? 'bg-green-100 text-green-700'
+                                      : pledge.status === 'pending'
+                                        ? 'bg-amber-100 text-amber-700'
+                                        : 'bg-red-100 text-red-700'
+                                  }`}>
+                                    {pledge.status || 'pending'}
+                                  </span>
+                                </div>
+                                {pledge.notes ? (
+                                  <p className="text-sm text-slate-600 mt-2">{pledge.notes}</p>
+                                ) : null}
+                                <p className="text-xs text-slate-400 mt-2">
+                                  {new Date(pledge.created_at).toLocaleString()}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {activeTab === 'activity' && (
                   <div className="space-y-4">
                     {activities.length === 0 ? (
@@ -556,6 +711,13 @@ function ContactDetail() {
                 >
                   <Calendar className="w-4 h-4" />
                   Schedule
+                </button>
+                <button
+                  onClick={() => { setActiveTab('pledges'); setShowPledgeForm(true) }}
+                  className="w-full flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 rounded-lg hover:bg-emerald-100 transition text-sm font-medium"
+                >
+                  <span className="text-sm font-bold">$</span>
+                  Add Pledge
                 </button>
               </div>
             </div>

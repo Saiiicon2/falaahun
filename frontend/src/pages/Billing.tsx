@@ -1,0 +1,222 @@
+import { useEffect, useMemo, useState } from 'react'
+import { AlertCircle, CheckCircle2, CreditCard, ExternalLink, Loader2 } from 'lucide-react'
+import { billingService } from '../services/api'
+
+type BillingStatus = {
+  organization?: {
+    id: string
+    name: string
+    email?: string
+    stripe_customer_id?: string
+  }
+  subscription?: {
+    plan_key?: string
+    status?: string
+    current_period_end?: string
+    cancel_at_period_end?: boolean
+  }
+}
+
+const planOptions = [
+  {
+    key: 'starter',
+    name: 'Starter',
+    price: '$19/mo',
+    envKey: 'VITE_STRIPE_PRICE_STARTER',
+    features: 'Basic CRM + contact timeline + reminders',
+  },
+  {
+    key: 'pro',
+    name: 'Pro',
+    price: '$49/mo',
+    envKey: 'VITE_STRIPE_PRICE_PRO',
+    features: 'Pipelines, reports, and advanced automation',
+  },
+  {
+    key: 'team',
+    name: 'Team',
+    price: '$99/mo',
+    envKey: 'VITE_STRIPE_PRICE_TEAM',
+    features: 'Multi-user controls + premium support',
+  },
+] as const
+
+function Billing() {
+  const [loading, setLoading] = useState(true)
+  const [redirecting, setRedirecting] = useState(false)
+  const [statusData, setStatusData] = useState<BillingStatus>({})
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+
+  const plans = useMemo(
+    () =>
+      planOptions.map((p) => ({
+        ...p,
+        priceId: import.meta.env[p.envKey],
+      })),
+    []
+  )
+
+  const loadStatus = async () => {
+    try {
+      setLoading(true)
+      setError('')
+      const response = await billingService.getStatus()
+      if (response.data.success) {
+        setStatusData(response.data.data || {})
+      } else {
+        setError('Failed to load billing status')
+      }
+    } catch (err: any) {
+      setError(err?.response?.data?.error || 'Failed to load billing status')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadStatus()
+
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('reason') === 'premium') {
+      setError('This is a premium feature. Upgrade your plan to unlock it.')
+    }
+    if (params.get('checkout') === 'success') {
+      setSuccess('Checkout completed. Subscription status is updating.')
+    }
+    if (params.get('checkout') === 'cancel') {
+      setError('Checkout was canceled. No charges were made.')
+    }
+  }, [])
+
+  const startCheckout = async (priceId?: string) => {
+    if (!priceId) {
+      setError('Stripe price ID is missing. Set VITE_STRIPE_PRICE_* in frontend env.')
+      return
+    }
+
+    try {
+      setRedirecting(true)
+      setError('')
+      const response = await billingService.createCheckoutSession(
+        priceId,
+        `${window.location.origin}/billing?checkout=success`,
+        `${window.location.origin}/billing?checkout=cancel`
+      )
+      const url = response?.data?.data?.url
+      if (!url) {
+        throw new Error('Checkout URL was not returned')
+      }
+      window.location.href = url
+    } catch (err: any) {
+      setError(err?.response?.data?.error || err?.message || 'Failed to start checkout')
+      setRedirecting(false)
+    }
+  }
+
+  const openPortal = async () => {
+    try {
+      setRedirecting(true)
+      setError('')
+      const response = await billingService.createPortalSession(`${window.location.origin}/billing`)
+      const url = response?.data?.data?.url
+      if (!url) {
+        throw new Error('Portal URL was not returned')
+      }
+      window.location.href = url
+    } catch (err: any) {
+      setError(err?.response?.data?.error || err?.message || 'Failed to open customer portal')
+      setRedirecting(false)
+    }
+  }
+
+  const subscription = statusData.subscription
+  const activePlan = subscription?.plan_key || 'No active plan'
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <div className="bg-white border-b border-slate-200 sticky top-0 z-10">
+        <div className="max-w-6xl mx-auto px-8 py-6">
+          <div className="flex items-center gap-3">
+            <CreditCard className="w-6 h-6 text-slate-900" />
+            <h1 className="text-2xl font-bold text-slate-900">Billing</h1>
+          </div>
+          <p className="text-sm text-slate-600 mt-2">Manage your subscription and payment settings</p>
+        </div>
+      </div>
+
+      <div className="max-w-6xl mx-auto px-8 py-8 space-y-6">
+        {error && (
+          <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
+            <p className="text-red-800">{error}</p>
+          </div>
+        )}
+
+        {success && (
+          <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg flex items-start gap-3">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 mt-0.5 flex-shrink-0" />
+            <p className="text-emerald-800">{success}</p>
+          </div>
+        )}
+
+        <div className="bg-white border border-slate-200 rounded-xl p-6">
+          {loading ? (
+            <div className="flex items-center gap-3 text-slate-600">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Loading billing status...</span>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <p className="text-sm text-slate-500">Organization</p>
+                <p className="text-slate-900 font-semibold">{statusData.organization?.name || '-'}</p>
+              </div>
+              <div>
+                <p className="text-sm text-slate-500">Plan</p>
+                <p className="text-slate-900 font-semibold">{activePlan}</p>
+              </div>
+              <div>
+                <p className="text-sm text-slate-500">Status</p>
+                <p className="text-slate-900 font-semibold">{subscription?.status || 'not_started'}</p>
+              </div>
+            </div>
+          )}
+
+          <div className="mt-6">
+            <button
+              onClick={openPortal}
+              disabled={redirecting || loading}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-60"
+            >
+              {redirecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <ExternalLink className="w-4 h-4" />}
+              Manage Billing Portal
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900 mb-4">Choose a Plan</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {plans.map((plan) => (
+              <div key={plan.key} className="bg-white border border-slate-200 rounded-xl p-6 flex flex-col">
+                <p className="text-sm uppercase tracking-wide text-slate-500">{plan.name}</p>
+                <p className="text-3xl font-bold text-slate-900 mt-2">{plan.price}</p>
+                <p className="text-sm text-slate-600 mt-3 flex-1">{plan.features}</p>
+                <button
+                  onClick={() => startCheckout(plan.priceId)}
+                  disabled={redirecting || !plan.priceId}
+                  className="mt-4 px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-60"
+                >
+                  {plan.priceId ? 'Upgrade' : 'Missing Price ID'}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default Billing

@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
-import { activityService, projectService } from '../services/api'
+import { activityService, projectService, pledgeService } from '../services/api'
 
 function Reports() {
   const [stats, setStats] = useState<any>(null)
   const [projects, setProjects] = useState<any[]>([])
+  const [pledgeStats, setPledgeStats] = useState<any>(null)
+  const [ownerStats, setOwnerStats] = useState<{ name: string; count: number }[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -13,9 +15,10 @@ function Reports() {
 
   const fetchReportData = async () => {
     try {
-      const [activitiesRes, projectsRes] = await Promise.all([
+      const [activitiesRes, projectsRes, pledgeStatsRes] = await Promise.all([
         activityService.getRecent(),
-        projectService.getAll(100)
+        projectService.getAll(100),
+        pledgeService.getStats(),
       ])
 
       // Process activity data for charts
@@ -32,13 +35,28 @@ function Reports() {
         count,
         name: type.charAt(0).toUpperCase() + type.slice(1)
       }))
+
+      const ownerCounts: Record<string, number> = {}
+      activitiesData.forEach((activity: any) => {
+        const ownerName = activity.created_by_name || activity.assigned_to_name || activity.created_by || 'Unknown'
+        ownerCounts[ownerName] = (ownerCounts[ownerName] || 0) + 1
+      })
+
+      const processedOwnerStats = Object.entries(ownerCounts)
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 8)
       
       setStats(processedStats)
       setProjects(projectsRes.data.data || [])
+      setPledgeStats(pledgeStatsRes.data.data || null)
+      setOwnerStats(processedOwnerStats)
     } catch (error) {
       console.error('Error fetching report data:', error)
       setStats([])
       setProjects([])
+      setPledgeStats(null)
+      setOwnerStats([])
     } finally {
       setLoading(false)
     }
@@ -57,7 +75,6 @@ function Reports() {
 
   const totalRaised = projects.reduce((sum: number, p: any) => sum + (parseFloat(p.raised) || 0), 0)
   const totalTarget = projects.reduce((sum: number, p: any) => sum + (parseFloat(p.budget) || 0), 0)
-  const activeProjects = projects.filter((p: any) => p.status === 'active').length
 
   // Format currency safely
   const formatCurrency = (value: number | string) => {
@@ -94,9 +111,9 @@ function Reports() {
           <p className="text-xs text-gray-400 mt-2">Overall target</p>
         </div>
         <div className="bg-white p-6 rounded-lg shadow">
-          <p className="text-gray-500 text-sm font-medium">Active Projects</p>
-          <p className="text-3xl font-bold text-orange-600 mt-3">{activeProjects}</p>
-          <p className="text-xs text-gray-400 mt-2">Ongoing initiatives</p>
+          <p className="text-gray-500 text-sm font-medium">Total Pledges</p>
+          <p className="text-3xl font-bold text-orange-600 mt-3">{Number(pledgeStats?.total_pledges || 0)}</p>
+          <p className="text-xs text-gray-400 mt-2">Received: {formatCurrency(pledgeStats?.total_received || 0)}</p>
         </div>
       </div>
 
@@ -167,6 +184,23 @@ function Reports() {
               </div>
             ) : (
               <p className="text-gray-500 text-center py-8">No activity data available</p>
+            )}
+          </div>
+
+          {/* Team Activity Summary */}
+          <div className="col-span-2 bg-white p-6 rounded-lg shadow">
+            <h2 className="text-lg font-semibold text-slate-900 mb-4">Who Did What</h2>
+            {ownerStats.length > 0 ? (
+              <div className="space-y-3">
+                {ownerStats.map((owner) => (
+                  <div key={owner.name} className="flex items-center justify-between pb-3 border-b last:border-0">
+                    <p className="font-medium text-slate-900">{owner.name}</p>
+                    <span className="text-sm font-semibold text-emerald-700">{owner.count} activities</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-gray-500 text-center py-8">No activity ownership data available</p>
             )}
           </div>
 

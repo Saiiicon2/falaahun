@@ -5,14 +5,14 @@ import { v4 as uuidv4 } from 'uuid'
 const mockEmails: any[] = []
 
 export const emailModel = {
-  async getByContact(contactId: string, limit = 50) {
+  async getByContact(contactId: string, tenantOrganizationId: string, limit = 50) {
     try {
       const result = await pool.query(
         `SELECT * FROM email_logs 
-         WHERE contact_id = $1 
+         WHERE contact_id = $1 AND tenant_organization_id = $2
          ORDER BY created_at DESC 
-         LIMIT $2`,
-        [contactId, limit]
+         LIMIT $3`,
+        [contactId, tenantOrganizationId, limit]
       )
       return result.rows
     } catch (error) {
@@ -30,10 +30,12 @@ export const emailModel = {
     subject: string
     body: string
     sentBy: string
+    tenantOrganizationId: string
   }) {
     const id = uuidv4()
     const email = {
       id,
+      tenant_organization_id: data.tenantOrganizationId,
       contact_id: data.contactId,
       from_email: data.fromEmail,
       to_email: data.toEmail,
@@ -49,11 +51,12 @@ export const emailModel = {
 
     try {
       const result = await pool.query(
-        `INSERT INTO email_logs (id, contact_id, from_email, to_email, subject, body, sent_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `INSERT INTO email_logs (id, tenant_organization_id, contact_id, from_email, to_email, subject, body, sent_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING *`,
         [
           id,
+          data.tenantOrganizationId,
           data.contactId,
           data.fromEmail,
           data.toEmail,
@@ -69,15 +72,18 @@ export const emailModel = {
     }
   },
 
-  async markAsOpened(id: string) {
+  async markAsOpened(id: string, tenantOrganizationId?: string) {
     try {
-      const result = await pool.query(
-        `UPDATE email_logs 
+      let query = `UPDATE email_logs 
          SET opened = true, opened_at = CURRENT_TIMESTAMP 
-         WHERE id = $1 
-         RETURNING *`,
-        [id]
-      )
+         WHERE id = $1`
+      const params: any[] = [id]
+      if (tenantOrganizationId) {
+        query += ` AND tenant_organization_id = $2`
+        params.push(tenantOrganizationId)
+      }
+      query += ' RETURNING *'
+      const result = await pool.query(query, params)
       return result.rows[0]
     } catch (error) {
       const email = mockEmails.find(e => e.id === id)
@@ -89,8 +95,15 @@ export const emailModel = {
     }
   },
 
-  async getById(id: string) {
+  async getById(id: string, tenantOrganizationId?: string) {
     try {
+      if (tenantOrganizationId) {
+        const result = await pool.query(
+          'SELECT * FROM email_logs WHERE id = $1 AND tenant_organization_id = $2',
+          [id, tenantOrganizationId]
+        )
+        return result.rows[0]
+      }
       const result = await pool.query(
         'SELECT * FROM email_logs WHERE id = $1',
         [id]
@@ -101,7 +114,7 @@ export const emailModel = {
     }
   },
 
-  async getStats() {
+  async getStats(tenantOrganizationId: string) {
     try {
       const result = await pool.query(
         `SELECT 
@@ -109,7 +122,9 @@ export const emailModel = {
           SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) as sent,
           SUM(CASE WHEN opened = true THEN 1 ELSE 0 END) as opened,
           SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed
-         FROM email_logs`
+         FROM email_logs
+         WHERE tenant_organization_id = $1`,
+        [tenantOrganizationId]
       )
       return result.rows[0]
     } catch (error) {

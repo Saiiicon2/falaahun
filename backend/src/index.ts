@@ -13,6 +13,9 @@ import callLogRoutes from './routes/callLogs'
 import scheduleRoutes from './routes/schedules'
 import integrationRoutes from './routes/integrations'
 import organizationRoutes from './routes/organizations'
+import pledgeRoutes from './routes/pledges'
+import billingRoutes from './routes/billing'
+import { handleStripeWebhook } from './controllers/billing'
 import { syncService } from './services/syncService'
 
 dotenv.config()
@@ -35,6 +38,10 @@ app.use(cors({
   origin: allowedOrigins,
   credentials: true
 }))
+
+// Stripe webhook requires the raw body for signature verification.
+app.post('/billing/webhook', express.raw({ type: 'application/json' }), handleStripeWebhook)
+
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 
@@ -57,6 +64,8 @@ app.use('/callLogs', callLogRoutes)
 app.use('/schedules', scheduleRoutes)
 app.use('/integrations', integrationRoutes)
 app.use('/organizations', organizationRoutes)
+app.use('/pledges', pledgeRoutes)
+app.use('/billing', billingRoutes)
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

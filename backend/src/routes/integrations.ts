@@ -5,12 +5,14 @@
 
 import { Router, Request, Response } from 'express'
 import { authMiddleware } from '../middleware/auth'
+import { requireActiveSubscription } from '../middleware/subscription'
 import { syncService } from '../services/syncService'
 
 const router = Router()
 
 // Protect all integration routes with authentication
 router.use(authMiddleware)
+router.use(requireActiveSubscription)
 
 /**
  * GET /integrations/status

@@ -6,9 +6,11 @@
 import pool from '../db/connection'
 import { v4 as uuidv4 } from 'uuid'
 
-interface Pledge {
+export interface Pledge {
   id: string
+  tenant_organization_id?: string
   contact_id: string
+  deal_id?: string
   amount: number
   currency?: string
   type: string // 'pledge', 'donation', 'zakat', 'sadaqah'
@@ -29,51 +31,101 @@ interface Pledge {
 const mockPledges: Pledge[] = []
 
 export const pledgeModel = {
-  async getByContact(contactId: string, limit = 50) {
+  async getByContact(contactId: string, tenantOrganizationId: string, limit = 50) {
     try {
       const result = await pool.query(
         `SELECT p.*, u.name as logged_by_name
          FROM pledges p
          LEFT JOIN users u ON p.logged_by = u.id
-         WHERE p.contact_id = $1
+         WHERE p.contact_id = $1 AND p.tenant_organization_id = $2
          ORDER BY p.created_at DESC
-         LIMIT $2`,
-        [contactId, limit]
+         LIMIT $3`,
+        [contactId, tenantOrganizationId, limit]
       )
       return result.rows
     } catch (error) {
-      return mockPledges.filter((p) => p.contact_id === contactId).slice(0, limit)
+      return mockPledges.filter((p) => p.contact_id === contactId && p.tenant_organization_id === tenantOrganizationId).slice(0, limit)
     }
   },
 
-  async getAll(limit = 50, offset = 0) {
+  async getAll(tenantOrganizationId: string, limit = 50, offset = 0) {
     try {
       const result = await pool.query(
         `SELECT p.*, u.name as logged_by_name
          FROM pledges p
          LEFT JOIN users u ON p.logged_by = u.id
+         WHERE p.tenant_organization_id = $1
          ORDER BY p.created_at DESC
-         LIMIT $1 OFFSET $2`,
-        [limit, offset]
+         LIMIT $2 OFFSET $3`,
+        [tenantOrganizationId, limit, offset]
       )
       return result.rows
     } catch (error) {
-      return mockPledges.slice(offset, offset + limit)
+      return mockPledges
+        .filter((pledge) => pledge.tenant_organization_id === tenantOrganizationId)
+        .slice(offset, offset + limit)
     }
   },
 
-  async getById(id: string) {
+  async getByDeal(dealId: string, tenantOrganizationId: string, limit = 50) {
     try {
       const result = await pool.query(
         `SELECT p.*, u.name as logged_by_name
          FROM pledges p
          LEFT JOIN users u ON p.logged_by = u.id
-         WHERE p.id = $1`,
-        [id]
+         WHERE p.deal_id = $1 AND p.tenant_organization_id = $2
+         ORDER BY p.created_at DESC
+         LIMIT $3`,
+        [dealId, tenantOrganizationId, limit]
       )
+      return result.rows
+    } catch (error) {
+      return mockPledges.filter((p) => p.deal_id === dealId && p.tenant_organization_id === tenantOrganizationId).slice(0, limit)
+    }
+  },
+
+  async getByProject(projectId: string, tenantOrganizationId: string, limit = 50, offset = 0) {
+    try {
+      const result = await pool.query(
+        `SELECT p.*, u.name as logged_by_name, d.title as deal_title
+         FROM pledges p
+         LEFT JOIN users u ON p.logged_by = u.id
+         LEFT JOIN deals d ON p.deal_id = d.id
+         LEFT JOIN contacts c ON p.contact_id = c.id
+         WHERE p.tenant_organization_id = $1
+           AND (d.project_id = $2 OR (p.deal_id IS NULL AND c.project_id = $2))
+         ORDER BY p.created_at DESC
+         LIMIT $3 OFFSET $4`,
+        [tenantOrganizationId, projectId, limit, offset]
+      )
+      return result.rows
+    } catch (error) {
+      return mockPledges
+        .filter((p: any) => p.project_id === projectId && p.tenant_organization_id === tenantOrganizationId)
+        .slice(offset, offset + limit)
+    }
+  },
+
+  async getById(id: string, tenantOrganizationId?: string) {
+    try {
+      const result = tenantOrganizationId
+        ? await pool.query(
+            `SELECT p.*, u.name as logged_by_name
+             FROM pledges p
+             LEFT JOIN users u ON p.logged_by = u.id
+             WHERE p.id = $1 AND p.tenant_organization_id = $2`,
+            [id, tenantOrganizationId]
+          )
+        : await pool.query(
+            `SELECT p.*, u.name as logged_by_name
+             FROM pledges p
+             LEFT JOIN users u ON p.logged_by = u.id
+             WHERE p.id = $1`,
+            [id]
+          )
       return result.rows[0]
     } catch (error) {
-      return mockPledges.find((p) => p.id === id)
+      return mockPledges.find((p) => p.id === id && (!tenantOrganizationId || p.tenant_organization_id === tenantOrganizationId))
     }
   },
 
@@ -84,19 +136,24 @@ export const pledgeModel = {
     try {
       const result = await pool.query(
         `INSERT INTO pledges (
-          id, contact_id, amount, currency, type, status,
-          payment_method, expected_date, notes, logged_by, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+          id, tenant_organization_id, contact_id, amount, currency, type, status,
+          payment_method, transaction_id, deal_id, expected_date, received_date,
+          notes, logged_by, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
         RETURNING *`,
         [
           id,
+          pledge.tenant_organization_id,
           pledge.contact_id,
           pledge.amount,
           pledge.currency || 'USD',
           pledge.type || 'donation',
           pledge.status || 'pending',
           pledge.payment_method,
+          pledge.transaction_id,
+          pledge.deal_id,
           pledge.expected_date,
+          pledge.received_date,
           pledge.notes,
           pledge.logged_by,
           now,
@@ -107,7 +164,9 @@ export const pledgeModel = {
     } catch (error) {
       const newPledge = {
         id: id,
+        tenant_organization_id: pledge.tenant_organization_id,
         contact_id: pledge.contact_id,
+        deal_id: pledge.deal_id,
         amount: pledge.amount,
         currency: pledge.currency || 'USD',
         type: pledge.type || 'donation',
@@ -126,7 +185,7 @@ export const pledgeModel = {
     }
   },
 
-  async update(id: string, data: Partial<Pledge>) {
+  async update(id: string, data: Partial<Pledge>, tenantOrganizationId?: string) {
     const updates: string[] = []
     const values: any[] = []
     let paramCount = 1
@@ -143,13 +202,18 @@ export const pledgeModel = {
     values.push(id)
 
     try {
-      const result = await pool.query(
-        `UPDATE pledges SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING *`,
-        values
-      )
+      const result = tenantOrganizationId
+        ? await pool.query(
+            `UPDATE pledges SET ${updates.join(', ')} WHERE id = $${paramCount} AND tenant_organization_id = $${paramCount + 1} RETURNING *`,
+            [...values, id, tenantOrganizationId]
+          )
+        : await pool.query(
+            `UPDATE pledges SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING *`,
+            [...values, id]
+          )
       return result.rows[0]
     } catch (error) {
-      const pledgeIndex = mockPledges.findIndex((p) => p.id === id)
+      const pledgeIndex = mockPledges.findIndex((p) => p.id === id && (!tenantOrganizationId || p.tenant_organization_id === tenantOrganizationId))
       if (pledgeIndex > -1) {
         mockPledges[pledgeIndex] = {
           ...mockPledges[pledgeIndex],
@@ -162,12 +226,12 @@ export const pledgeModel = {
     }
   },
 
-  async delete(id: string) {
+  async delete(id: string, tenantOrganizationId: string) {
     try {
-      await pool.query(`DELETE FROM pledges WHERE id = $1`, [id])
+      await pool.query(`DELETE FROM pledges WHERE id = $1 AND tenant_organization_id = $2`, [id, tenantOrganizationId])
       return { success: true }
     } catch (error) {
-      const index = mockPledges.findIndex((p) => p.id === id)
+      const index = mockPledges.findIndex((p) => p.id === id && p.tenant_organization_id === tenantOrganizationId)
       if (index > -1) {
         mockPledges.splice(index, 1)
         return { success: true }
@@ -176,33 +240,54 @@ export const pledgeModel = {
     }
   },
 
-  async getStats() {
+  async getStats(tenantOrganizationId: string, projectId?: string) {
+    const whereClause = projectId
+      ? `
+        WHERE p.tenant_organization_id = $1
+          AND (d.project_id = $2 OR (p.deal_id IS NULL AND c.project_id = $2))
+      `
+      : 'WHERE p.tenant_organization_id = $1'
+
+    const params = projectId ? [tenantOrganizationId, projectId] : [tenantOrganizationId]
+
     try {
       const result = await pool.query(
         `SELECT
           COUNT(*) as total_pledges,
+          SUM(amount) as total_amount,
           SUM(CASE WHEN status = 'received' THEN amount ELSE 0 END) as total_received,
           SUM(CASE WHEN status = 'pending' THEN amount ELSE 0 END) as total_pending,
           AVG(amount) as average_amount
-         FROM pledges`
+         FROM pledges p
+         LEFT JOIN deals d ON p.deal_id = d.id
+         LEFT JOIN contacts c ON p.contact_id = c.id
+         ${whereClause}`,
+        params
       )
       return result.rows[0]
     } catch (error) {
-      const totalReceived = mockPledges
+      const filtered = projectId
+        ? mockPledges.filter((p: any) => p.project_id === projectId && p.tenant_organization_id === tenantOrganizationId)
+        : mockPledges.filter((p) => p.tenant_organization_id === tenantOrganizationId)
+
+      const totalReceived = filtered
         .filter((p) => p.status === 'received')
         .reduce((sum, p) => sum + p.amount, 0)
 
-      const totalPending = mockPledges
+      const totalPending = filtered
         .filter((p) => p.status === 'pending')
         .reduce((sum, p) => sum + p.amount, 0)
 
+      const totalAmount = filtered.reduce((sum, p) => sum + p.amount, 0)
+
       return {
-        total_pledges: mockPledges.length,
+        total_pledges: filtered.length,
+        total_amount: totalAmount,
         total_received: totalReceived,
         total_pending: totalPending,
         average_amount:
-          mockPledges.length > 0
-            ? mockPledges.reduce((sum, p) => sum + p.amount, 0) / mockPledges.length
+          filtered.length > 0
+            ? filtered.reduce((sum, p) => sum + p.amount, 0) / filtered.length
             : 0,
       }
     }

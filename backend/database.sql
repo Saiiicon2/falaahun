@@ -187,6 +187,7 @@ CREATE TABLE IF NOT EXISTS schedules (
 CREATE TABLE IF NOT EXISTS pledges (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   contact_id UUID NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+  deal_id UUID REFERENCES deals(id) ON DELETE SET NULL,
   amount DECIMAL(10, 2) NOT NULL,
   currency VARCHAR(3) DEFAULT 'USD',
   type VARCHAR(50) DEFAULT 'donation', -- donation, pledge, zakat, sadaqah
@@ -257,6 +258,67 @@ CREATE INDEX IF NOT EXISTS idx_sync_logs_entity ON integration_sync_logs(entity_
 CREATE INDEX IF NOT EXISTS idx_contacts_organization ON contacts(organization_id);
 CREATE INDEX IF NOT EXISTS idx_activities_contact ON activities(contact_id);
 CREATE INDEX IF NOT EXISTS idx_deals_project ON deals(project_id);
+
+-- SaaS tenancy migrations
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS slug VARCHAR(255) UNIQUE;
+
+CREATE TABLE IF NOT EXISTS organization_memberships (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role VARCHAR(50) NOT NULL DEFAULT 'member',
+  status VARCHAR(50) NOT NULL DEFAULT 'active',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (organization_id, user_id)
+);
+
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS tenant_organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS tenant_organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE;
+ALTER TABLE pipeline_stages ADD COLUMN IF NOT EXISTS tenant_organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE;
+ALTER TABLE deals ADD COLUMN IF NOT EXISTS tenant_organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE;
+ALTER TABLE pledges ADD COLUMN IF NOT EXISTS tenant_organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE;
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS tenant_organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE;
+ALTER TABLE comments ADD COLUMN IF NOT EXISTS tenant_organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE;
+ALTER TABLE email_logs ADD COLUMN IF NOT EXISTS tenant_organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE;
+ALTER TABLE call_logs ADD COLUMN IF NOT EXISTS tenant_organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE;
+ALTER TABLE schedules ADD COLUMN IF NOT EXISTS tenant_organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE;
+
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS billing_email VARCHAR(255);
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS stripe_customer_id VARCHAR(255);
+
+CREATE TABLE IF NOT EXISTS organization_subscriptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  provider VARCHAR(50) NOT NULL DEFAULT 'stripe',
+  provider_customer_id VARCHAR(255),
+  provider_subscription_id VARCHAR(255) NOT NULL UNIQUE,
+  plan_key VARCHAR(255),
+  status VARCHAR(50) NOT NULL DEFAULT 'incomplete',
+  current_period_start TIMESTAMP,
+  current_period_end TIMESTAMP,
+  cancel_at_period_end BOOLEAN DEFAULT false,
+  canceled_at TIMESTAMP,
+  trial_end TIMESTAMP,
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_contacts_tenant_organization ON contacts(tenant_organization_id);
+CREATE INDEX IF NOT EXISTS idx_projects_tenant_organization ON projects(tenant_organization_id);
+CREATE INDEX IF NOT EXISTS idx_pipeline_stages_tenant_organization ON pipeline_stages(tenant_organization_id);
+CREATE INDEX IF NOT EXISTS idx_deals_tenant_organization ON deals(tenant_organization_id);
+CREATE INDEX IF NOT EXISTS idx_pledges_tenant_organization ON pledges(tenant_organization_id);
+CREATE INDEX IF NOT EXISTS idx_activities_tenant_organization ON activities(tenant_organization_id);
+CREATE INDEX IF NOT EXISTS idx_comments_tenant_organization ON comments(tenant_organization_id);
+CREATE INDEX IF NOT EXISTS idx_email_logs_tenant_organization ON email_logs(tenant_organization_id);
+CREATE INDEX IF NOT EXISTS idx_call_logs_tenant_organization ON call_logs(tenant_organization_id);
+CREATE INDEX IF NOT EXISTS idx_schedules_tenant_organization ON schedules(tenant_organization_id);
+CREATE INDEX IF NOT EXISTS idx_organizations_stripe_customer ON organizations(stripe_customer_id);
+CREATE INDEX IF NOT EXISTS idx_org_subscriptions_org ON organization_subscriptions(organization_id);
+CREATE INDEX IF NOT EXISTS idx_org_subscriptions_status ON organization_subscriptions(status);
+CREATE INDEX IF NOT EXISTS idx_org_memberships_user_org ON organization_memberships(user_id, organization_id);
 CREATE INDEX IF NOT EXISTS idx_pledges_deal ON pledges(deal_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_contact ON tasks(contact_id);
 CREATE INDEX IF NOT EXISTS idx_activities_created_by ON activities(created_by);

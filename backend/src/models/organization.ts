@@ -9,6 +9,7 @@ import { v4 as uuidv4 } from 'uuid'
 interface Organization {
   id: string
   name: string
+  slug?: string
   email?: string
   phone?: string
   address?: string
@@ -24,11 +25,19 @@ const mockOrganizations: Organization[] = [
   {
     id: '00000000-0000-0000-0000-000000000001',
     name: 'Default Organization',
+    slug: 'default-organization',
     email: 'org@falaahun.org',
     created_at: new Date(),
     updated_at: new Date(),
   },
 ]
+
+const toSlug = (value: string) =>
+  value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
 
 const organizationModel = {
   async getAll() {
@@ -51,18 +60,37 @@ const organizationModel = {
     }
   },
 
+  async getByUserId(userId: string) {
+    try {
+      const result = await pool.query(
+        `SELECT o.*
+         FROM organizations o
+         INNER JOIN organization_memberships om ON om.organization_id = o.id
+         WHERE om.user_id = $1 AND om.status = 'active'
+         ORDER BY om.created_at ASC`,
+        [userId]
+      )
+
+      return result.rows
+    } catch (error) {
+      return mockOrganizations
+    }
+  },
+
   async create(organization: Omit<Organization, 'id' | 'created_at' | 'updated_at'>) {
     const id = uuidv4()
     const now = new Date()
+    const slug = organization.slug || toSlug(organization.name)
 
     try {
       const result = await pool.query(
-        `INSERT INTO organizations (id, name, email, phone, address, website, description, logo_url, logo_key, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        `INSERT INTO organizations (id, name, slug, email, phone, address, website, description, logo_url, logo_key, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
          RETURNING *`,
         [
           id,
           organization.name,
+          slug,
           organization.email,
           organization.phone,
           organization.address,
@@ -79,6 +107,7 @@ const organizationModel = {
       const newOrg = {
         id,
         ...organization,
+        slug,
         created_at: now,
         updated_at: now,
       }

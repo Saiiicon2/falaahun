@@ -3,9 +3,12 @@ import { scheduleModel } from '../models/schedule'
 
 export const getContactSchedules = async (req: Request, res: Response) => {
   try {
+    if (!req.user?.organizationId) {
+      return res.status(400).json({ success: false, error: 'Organization context is required' })
+    }
     const { contactId } = req.params
 
-    const schedules = await scheduleModel.getByContact(contactId)
+    const schedules = await scheduleModel.getByContact(contactId, req.user.organizationId)
 
     res.json({ success: true, data: schedules })
   } catch (error: any) {
@@ -15,9 +18,12 @@ export const getContactSchedules = async (req: Request, res: Response) => {
 
 export const getUpcomingSchedules = async (req: Request, res: Response) => {
   try {
+    if (!req.user?.organizationId) {
+      return res.status(400).json({ success: false, error: 'Organization context is required' })
+    }
     const { limit = 20 } = req.query
 
-    const schedules = await scheduleModel.getUpcoming(parseInt(limit as string))
+    const schedules = await scheduleModel.getUpcoming(req.user.organizationId, parseInt(limit as string))
 
     res.json({ success: true, data: schedules })
   } catch (error: any) {
@@ -27,6 +33,9 @@ export const getUpcomingSchedules = async (req: Request, res: Response) => {
 
 export const createSchedule = async (req: Request, res: Response) => {
   try {
+    if (!req.user?.organizationId) {
+      return res.status(400).json({ success: false, error: 'Organization context is required' })
+    }
     const { contactId } = req.params
     const {
       title,
@@ -57,8 +66,9 @@ export const createSchedule = async (req: Request, res: Response) => {
       endTime: endTime ? new Date(endTime) : new Date(startTime),
       location: location || '',
       attendees: attendees || [],
-      assignedTo: assignedTo || req.user!.id,
-      createdBy: req.user!.id
+      assignedTo: assignedTo || req.user.id,
+      createdBy: req.user.id,
+      tenantOrganizationId: req.user.organizationId
     })
 
     res.status(201).json({ success: true, data: schedule })
@@ -69,6 +79,9 @@ export const createSchedule = async (req: Request, res: Response) => {
 
 export const updateSchedule = async (req: Request, res: Response) => {
   try {
+    if (!req.user?.organizationId) {
+      return res.status(400).json({ success: false, error: 'Organization context is required' })
+    }
     const { id } = req.params
     const { status, title, description, startTime } = req.body
 
@@ -76,9 +89,9 @@ export const updateSchedule = async (req: Request, res: Response) => {
     if (status) updateData.status = status
     if (title) updateData.title = title
     if (description) updateData.description = description
-    if (startTime) updateData.start_time = new Date(startTime)
+    if (startTime) updateData.startTime = new Date(startTime)
 
-    const schedule = await scheduleModel.update(id, updateData)
+    const schedule = await scheduleModel.update(id, updateData, req.user.organizationId)
 
     res.json({ success: true, data: schedule })
   } catch (error: any) {
@@ -88,9 +101,12 @@ export const updateSchedule = async (req: Request, res: Response) => {
 
 export const cancelSchedule = async (req: Request, res: Response) => {
   try {
+    if (!req.user?.organizationId) {
+      return res.status(400).json({ success: false, error: 'Organization context is required' })
+    }
     const { id } = req.params
 
-    const schedule = await scheduleModel.cancel(id)
+    const schedule = await scheduleModel.cancel(id, req.user.organizationId)
 
     res.json({ success: true, data: schedule })
   } catch (error: any) {
@@ -100,9 +116,12 @@ export const cancelSchedule = async (req: Request, res: Response) => {
 
 export const getSchedule = async (req: Request, res: Response) => {
   try {
+    if (!req.user?.organizationId) {
+      return res.status(400).json({ success: false, error: 'Organization context is required' })
+    }
     const { id } = req.params
 
-    const schedule = await scheduleModel.getById(id)
+    const schedule = await scheduleModel.getById(id, req.user.organizationId)
 
     if (!schedule) {
       return res.status(404).json({ success: false, error: 'Schedule not found' })

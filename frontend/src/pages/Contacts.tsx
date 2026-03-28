@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search, Edit2, Trash2 } from 'lucide-react'
+import { Plus, Search, Edit2, Trash2, X, ChevronDown } from 'lucide-react'
 import { contactService, projectService, organizationService } from '../services/api'
 
 interface Organization {
@@ -15,14 +15,34 @@ interface Project {
   status: string
 }
 
+interface FilterState {
+  leadStatus: string[]
+  labels: string[]
+  projectId: string
+  dateRange: { start: string; end: string }
+  search: string
+}
+
+const LEAD_STATUS_OPTIONS = ['lead', 'prospect', 'customer', 'past_customer']
+const LABEL_OPTIONS = ['VIP', 'Donor', 'Volunteer', 'Partner', 'Influencer', 'Active', 'Inactive']
+
 function Contacts() {
   const navigate = useNavigate()
   const [contacts, setContacts] = useState<any[]>([])
   const [organizations, setOrganizations] = useState<Organization[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
-  const [searchQuery, setSearchQuery] = useState('')
   const [showForm, setShowForm] = useState(false)
+  const [showFilters, setShowFilters] = useState(false)
+  
+  const [filters, setFilters] = useState<FilterState>({
+    leadStatus: [],
+    labels: [],
+    projectId: '',
+    dateRange: { start: '', end: '' },
+    search: ''
+  })
+
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -33,6 +53,16 @@ function Contacts() {
     company: '',
     project: ''
   })
+
+  // Count active filters
+  const activeFilterCount = useMemo(() => {
+    let count = 0
+    if (filters.leadStatus.length > 0) count++
+    if (filters.labels.length > 0) count++
+    if (filters.projectId) count++
+    if (filters.dateRange.start || filters.dateRange.end) count++
+    return count
+  }, [filters])
 
   useEffect(() => {
     fetchContacts()
@@ -62,9 +92,30 @@ function Contacts() {
     }
   }
 
-  const fetchContacts = async () => {
+  const fetchContacts = async (filterState: FilterState = filters) => {
     try {
-      const response = await contactService.getAll()
+      let params: any = {}
+      
+      if (filterState.leadStatus.length > 0) {
+        params.leadStatus = filterState.leadStatus
+      }
+      if (filterState.labels.length > 0) {
+        params.labels = filterState.labels
+      }
+      if (filterState.projectId) {
+        params.projectId = filterState.projectId
+      }
+      if (filterState.dateRange.start) {
+        params.startDate = filterState.dateRange.start
+      }
+      if (filterState.dateRange.end) {
+        params.endDate = filterState.dateRange.end
+      }
+      if (filterState.search) {
+        params.search = filterState.search
+      }
+
+      const response = await contactService.getAll(params)
       console.log('Fetched contacts response:', response.data)
       const contactsData = response.data.data?.contacts || response.data.data || []
       console.log('Setting contacts:', contactsData)
@@ -76,17 +127,35 @@ function Contacts() {
     }
   }
 
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) {
-      fetchContacts()
-      return
+  const handleFilterChange = (newFilters: FilterState) => {
+    setFilters(newFilters)
+    setLoading(true)
+    fetchContacts(newFilters)
+  }
+
+  const handleToggleLeadStatus = (status: string) => {
+    const newStatuses = filters.leadStatus.includes(status)
+      ? filters.leadStatus.filter(s => s !== status)
+      : [...filters.leadStatus, status]
+    handleFilterChange({ ...filters, leadStatus: newStatuses })
+  }
+
+  const handleToggleLabel = (label: string) => {
+    const newLabels = filters.labels.includes(label)
+      ? filters.labels.filter(l => l !== label)
+      : [...filters.labels, label]
+    handleFilterChange({ ...filters, labels: newLabels })
+  }
+
+  const clearAllFilters = () => {
+    const emptyFilters: FilterState = {
+      leadStatus: [],
+      labels: [],
+      projectId: '',
+      dateRange: { start: '', end: '' },
+      search: ''
     }
-    try {
-      const response = await contactService.search(searchQuery)
-      setContacts(response.data.data || [])
-    } catch (error) {
-      console.error('Error searching contacts:', error)
-    }
+    handleFilterChange(emptyFilters)
   }
 
   const handleAddContact = async (e: React.FormEvent) => {
@@ -104,7 +173,7 @@ function Contacts() {
       console.log('Contact created successfully:', response.data)
       setFormData({ firstName: '', lastName: '', email: '', phone: '', labels: '', leadStatus: 'lead', company: '', project: '' })
       setShowForm(false)
-      fetchContacts()
+      fetchContacts(filters)
     } catch (error: any) {
       console.error('Error adding contact:', error)
       console.error('Error response:', error.response?.data)
@@ -116,7 +185,7 @@ function Contacts() {
     if (confirm('Are you sure you want to delete this contact?')) {
       try {
         await contactService.delete(id)
-        fetchContacts()
+        fetchContacts(filters)
       } catch (error) {
         console.error('Error deleting contact:', error)
       }
@@ -257,25 +326,116 @@ function Contacts() {
       )}
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 mb-6 p-4">
-        <div className="flex gap-3">
+        <div className="flex gap-3 mb-4">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-3 w-5 h-5 text-slate-400" />
             <input
               type="text"
-              placeholder="Search contacts..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+              placeholder="Search contacts by name, email, or phone..."
+              value={filters.search}
+              onChange={(e) => handleFilterChange({ ...filters, search: e.target.value })}
+              onKeyPress={(e) => e.key === 'Enter' && handleFilterChange(filters)}
               className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-200"
             />
           </div>
           <button
-            onClick={handleSearch}
-            className="bg-gradient-to-r from-slate-700 to-slate-800 text-white px-6 py-2 rounded-lg hover:from-slate-800 hover:to-slate-900 font-medium"
+            onClick={() => setShowFilters(!showFilters)}
+            className="bg-gradient-to-r from-slate-700 to-slate-800 text-white px-6 py-2 rounded-lg hover:from-slate-800 hover:to-slate-900 font-medium flex items-center gap-2"
           >
-            Search
+            <ChevronDown className="w-4 h-4" />
+            Filters {activeFilterCount > 0 && <span className="bg-red-500 text-white px-2 py-0.5 rounded-full text-xs font-bold ml-1">{activeFilterCount}</span>}
           </button>
         </div>
+
+        {/* Filter Panel */}
+        {showFilters && (
+          <div className="border-t border-slate-200 pt-4">
+            <div className="grid grid-cols-4 gap-6 mb-4">
+              {/* Lead Status Filter */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-3 uppercase">Lead Status</label>
+                <div className="space-y-2">
+                  {LEAD_STATUS_OPTIONS.map(status => (
+                    <label key={status} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={filters.leadStatus.includes(status)}
+                        onChange={() => handleToggleLeadStatus(status)}
+                        className="w-4 h-4 rounded border-slate-300 text-emerald-600 cursor-pointer"
+                      />
+                      <span className="text-sm text-slate-700 capitalize">{status}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Labels Filter */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-3 uppercase">Labels</label>
+                <div className="space-y-2">
+                  {LABEL_OPTIONS.map(label => (
+                    <label key={label} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={filters.labels.includes(label)}
+                        onChange={() => handleToggleLabel(label)}
+                        className="w-4 h-4 rounded border-slate-300 text-emerald-600 cursor-pointer"
+                      />
+                      <span className="text-sm text-slate-700">{label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Project Filter */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-3 uppercase">Project</label>
+                <select
+                  value={filters.projectId}
+                  onChange={(e) => handleFilterChange({ ...filters, projectId: e.target.value })}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-200"
+                >
+                  <option value="">All Projects</option>
+                  {projects.map(project => (
+                    <option key={project.id} value={project.id}>{project.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Date Range Filter */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-3 uppercase">Date Range</label>
+                <div className="space-y-2">
+                  <input
+                    type="date"
+                    value={filters.dateRange.start}
+                    onChange={(e) => handleFilterChange({ ...filters, dateRange: { ...filters.dateRange, start: e.target.value } })}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-400"
+                    placeholder="Start date"
+                  />
+                  <input
+                    type="date"
+                    value={filters.dateRange.end}
+                    onChange={(e) => handleFilterChange({ ...filters, dateRange: { ...filters.dateRange, end: e.target.value } })}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-400"
+                    placeholder="End date"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {activeFilterCount > 0 && (
+              <div className="border-t border-slate-200 pt-4">
+                <button
+                  onClick={clearAllFilters}
+                  className="text-sm text-red-600 hover:text-red-700 font-medium"
+                >
+                  Clear all filters
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {loading ? (

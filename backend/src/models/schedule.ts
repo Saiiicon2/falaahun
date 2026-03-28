@@ -5,16 +5,16 @@ import { v4 as uuidv4 } from 'uuid'
 const mockSchedules: any[] = []
 
 export const scheduleModel = {
-  async getByContact(contactId: string) {
+  async getByContact(contactId: string, tenantOrganizationId: string) {
     try {
       const result = await pool.query(
         `SELECT s.*, u.name as assigned_to_name, c.name as created_by_name
          FROM schedules s
          LEFT JOIN users u ON s.assigned_to = u.id
          LEFT JOIN users c ON s.created_by = c.id
-         WHERE s.contact_id = $1
+         WHERE s.contact_id = $1 AND s.tenant_organization_id = $2
          ORDER BY s.start_time ASC`,
-        [contactId]
+        [contactId, tenantOrganizationId]
       )
       return result.rows
     } catch (error) {
@@ -24,17 +24,17 @@ export const scheduleModel = {
     }
   },
 
-  async getUpcoming(limit = 10) {
+  async getUpcoming(tenantOrganizationId: string, limit = 10) {
     try {
       const result = await pool.query(
         `SELECT s.*, u.name as assigned_to_name, con.first_name, con.last_name
          FROM schedules s
          LEFT JOIN users u ON s.assigned_to = u.id
          LEFT JOIN contacts con ON s.contact_id = con.id
-         WHERE s.start_time >= CURRENT_TIMESTAMP AND s.status = 'scheduled'
+         WHERE s.tenant_organization_id = $1 AND s.start_time >= CURRENT_TIMESTAMP AND s.status = 'scheduled'
          ORDER BY s.start_time ASC
-         LIMIT $1`,
-        [limit]
+         LIMIT $2`,
+        [tenantOrganizationId, limit]
       )
       return result.rows
     } catch (error) {
@@ -57,10 +57,12 @@ export const scheduleModel = {
     attendees?: string[]
     assignedTo: string
     createdBy: string
+    tenantOrganizationId: string
   }) {
     const id = uuidv4()
     const schedule = {
       id,
+      tenant_organization_id: data.tenantOrganizationId,
       contact_id: data.contactId,
       project_id: data.projectId,
       title: data.title,
@@ -79,11 +81,12 @@ export const scheduleModel = {
 
     try {
       const result = await pool.query(
-        `INSERT INTO schedules (id, contact_id, project_id, title, description, event_type, start_time, end_time, location, attendees, assigned_to, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        `INSERT INTO schedules (id, tenant_organization_id, contact_id, project_id, title, description, event_type, start_time, end_time, location, attendees, assigned_to, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
          RETURNING *`,
         [
           id,
+          data.tenantOrganizationId,
           data.contactId,
           data.projectId,
           data.title,
@@ -104,8 +107,19 @@ export const scheduleModel = {
     }
   },
 
-  async getById(id: string) {
+  async getById(id: string, tenantOrganizationId?: string) {
     try {
+      if (tenantOrganizationId) {
+        const result = await pool.query(
+          `SELECT s.*, u.name as assigned_to_name, c.name as created_by_name
+           FROM schedules s
+           LEFT JOIN users u ON s.assigned_to = u.id
+           LEFT JOIN users c ON s.created_by = c.id
+           WHERE s.id = $1 AND s.tenant_organization_id = $2`,
+          [id, tenantOrganizationId]
+        )
+        return result.rows[0]
+      }
       const result = await pool.query(
         `SELECT s.*, u.name as assigned_to_name, c.name as created_by_name
          FROM schedules s
@@ -120,7 +134,7 @@ export const scheduleModel = {
     }
   },
 
-  async update(id: string, data: Partial<any>) {
+  async update(id: string, data: Partial<any>, tenantOrganizationId?: string) {
     try {
       const updates: string[] = []
       const values: any[] = []
@@ -138,18 +152,22 @@ export const scheduleModel = {
         updates.push(`description = $${paramCount++}`)
         values.push(data.description)
       }
-      if (data.startTime) {
+      if (data.startTime || data.start_time) {
         updates.push(`start_time = $${paramCount++}`)
-        values.push(data.startTime)
+        values.push(data.startTime || data.start_time)
       }
 
       updates.push(`updated_at = CURRENT_TIMESTAMP`)
       values.push(id)
 
-      const result = await pool.query(
-        `UPDATE schedules SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING *`,
-        values
-      )
+      let query = `UPDATE schedules SET ${updates.join(', ')} WHERE id = $${paramCount}`
+      if (tenantOrganizationId) {
+        query += ` AND tenant_organization_id = $${paramCount + 1}`
+        values.push(tenantOrganizationId)
+      }
+      query += ' RETURNING *'
+
+      const result = await pool.query(query, values)
       return result.rows[0]
     } catch (error) {
       const schedule = mockSchedules.find(s => s.id === id)
@@ -161,7 +179,7 @@ export const scheduleModel = {
     }
   },
 
-  async cancel(id: string) {
-    return this.update(id, { status: 'cancelled' })
+  async cancel(id: string, tenantOrganizationId?: string) {
+    return this.update(id, { status: 'cancelled' }, tenantOrganizationId)
   }
 }

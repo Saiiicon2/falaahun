@@ -82,5 +82,28 @@ export const userModel = {
         created_at: u.created_at
       }))
     }
+  },
+
+  async getAllByOrganization(organizationId: string) {
+    try {
+      const result = await pool.query(
+        `SELECT u.id, u.email, u.name, u.role, om.role as membership_role, u.created_at
+         FROM users u
+         INNER JOIN organization_memberships om ON om.user_id = u.id
+         WHERE om.organization_id = $1 AND om.status = 'active'
+         ORDER BY u.created_at ASC`,
+        [organizationId]
+      )
+      return result.rows
+    } catch (error) {
+      return mockUsers.map(u => ({
+        id: u.id,
+        email: u.email,
+        name: u.name,
+        role: u.role,
+        membership_role: 'member',
+        created_at: u.created_at
+      }))
+    }
   }
 }

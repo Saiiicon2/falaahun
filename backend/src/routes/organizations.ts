@@ -8,9 +8,13 @@ import multer from 'multer'
 import path from 'path'
 import fs from 'fs'
 import organizationModel from '../models/organization'
+import { organizationMembershipModel } from '../models/organizationMembership'
 import { authMiddleware } from '../middleware/auth'
 
 const router = Router()
+
+const canManageOrganization = (req: Request) =>
+  req.user?.membershipRole === 'owner' || req.user?.membershipRole === 'admin'
 
 // Configure multer for file uploads
 const uploadDir = path.join(process.cwd(), 'uploads', 'logos')
@@ -47,7 +51,7 @@ const upload = multer({
 // Get all organizations
 router.get('/', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const organizations = await organizationModel.getAll()
+    const organizations = await organizationModel.getByUserId(req.user!.id)
     res.json({
       success: true,
       data: organizations,
@@ -64,7 +68,8 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
 // Get organization by ID
 router.get('/:id', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const organization = await organizationModel.getById(req.params.id)
+    const organizations = await organizationModel.getByUserId(req.user!.id)
+    const organization = organizations.find((item) => item.id === req.params.id)
     if (!organization) {
       return res.status(404).json({
         success: false,
@@ -96,6 +101,10 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
       })
     }
 
+    if (!canManageOrganization(req)) {
+      return res.status(403).json({ success: false, message: 'Owner or admin access required' })
+    }
+
     const organization = await organizationModel.create({
       name,
       email,
@@ -104,6 +113,8 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
       website,
       description,
     })
+
+    await organizationMembershipModel.create(organization.id, req.user!.id, 'owner')
 
     res.status(201).json({
       success: true,
@@ -121,6 +132,10 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
 // Update organization
 router.put('/:id', authMiddleware, async (req: Request, res: Response) => {
   try {
+    if (req.user?.organizationId !== req.params.id || !canManageOrganization(req)) {
+      return res.status(403).json({ success: false, message: 'You can only update your current organization' })
+    }
+
     const { name, email, phone, address, website, description } = req.body
 
     const organization = await organizationModel.update(req.params.id, {
@@ -159,6 +174,10 @@ router.post(
   upload.single('logo'),
   async (req: Request, res: Response) => {
     try {
+      if (req.user?.organizationId !== req.params.id || !canManageOrganization(req)) {
+        return res.status(403).json({ success: false, message: 'You can only update your current organization' })
+      }
+
       const multerReq = req as any // Type cast for multer properties
       
       if (!multerReq.file) {
@@ -215,6 +234,10 @@ router.post(
 // Delete logo
 router.delete('/:id/logo', authMiddleware, async (req: Request, res: Response) => {
   try {
+    if (req.user?.organizationId !== req.params.id || !canManageOrganization(req)) {
+      return res.status(403).json({ success: false, message: 'You can only update your current organization' })
+    }
+
     const organization = await organizationModel.getById(req.params.id)
     if (!organization) {
       return res.status(404).json({
@@ -249,6 +272,10 @@ router.delete('/:id/logo', authMiddleware, async (req: Request, res: Response) =
 // Delete organization
 router.delete('/:id', authMiddleware, async (req: Request, res: Response) => {
   try {
+    if (req.user?.organizationId !== req.params.id || req.user?.membershipRole !== 'owner') {
+      return res.status(403).json({ success: false, message: 'Only the organization owner can delete the organization' })
+    }
+
     const organization = await organizationModel.getById(req.params.id)
     if (!organization) {
       return res.status(404).json({

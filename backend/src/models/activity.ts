@@ -6,11 +6,11 @@ import { Activity } from '../types'
 const mockActivities: any[] = []
 
 export const activityModel = {
-  async getByContact(contactId: string, limit = 50) {
+  async getByContact(contactId: string, tenantOrganizationId: string, limit = 50) {
     try {
       const result = await pool.query(
-        `SELECT * FROM activities WHERE contact_id = $1 ORDER BY date DESC LIMIT $2`,
-        [contactId, limit]
+        `SELECT * FROM activities WHERE contact_id = $1 AND tenant_organization_id = $2 ORDER BY date DESC LIMIT $3`,
+        [contactId, tenantOrganizationId, limit]
       )
       return result.rows
     } catch (error) {
@@ -18,8 +18,15 @@ export const activityModel = {
     }
   },
 
-  async getById(id: string) {
+  async getById(id: string, tenantOrganizationId?: string) {
     try {
+      if (tenantOrganizationId) {
+        const result = await pool.query(
+          'SELECT * FROM activities WHERE id = $1 AND tenant_organization_id = $2',
+          [id, tenantOrganizationId]
+        )
+        return result.rows[0]
+      }
       const result = await pool.query(
         'SELECT * FROM activities WHERE id = $1',
         [id]
@@ -30,10 +37,11 @@ export const activityModel = {
     }
   },
 
-  async create(data: Partial<Activity> & { contactId: string; createdBy?: string }) {
+  async create(data: Partial<Activity> & { contactId: string; createdBy?: string; tenantOrganizationId: string }) {
     const id = uuidv4()
     const activity = {
       id,
+      tenant_organization_id: data.tenantOrganizationId,
       contact_id: data.contactId,
       type: data.type,
       title: data.title,
@@ -46,11 +54,12 @@ export const activityModel = {
     
     try {
       const result = await pool.query(
-        `INSERT INTO activities (id, contact_id, type, title, description, date, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `INSERT INTO activities (id, tenant_organization_id, contact_id, type, title, description, date, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING *`,
         [
           id,
+          data.tenantOrganizationId,
           data.contactId,
           data.type,
           data.title,
@@ -66,7 +75,7 @@ export const activityModel = {
     }
   },
 
-  async update(id: string, data: Partial<Activity>) {
+  async update(id: string, data: Partial<Activity>, tenantOrganizationId?: string) {
     const updates: string[] = []
     const values: any[] = []
     let paramCount = 1
@@ -88,10 +97,13 @@ export const activityModel = {
     values.push(id)
 
     try {
-      const result = await pool.query(
-        `UPDATE activities SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING *`,
-        values
-      )
+      let query = `UPDATE activities SET ${updates.join(', ')} WHERE id = $${paramCount}`
+      if (tenantOrganizationId) {
+        query += ` AND tenant_organization_id = $${paramCount + 1}`
+        values.push(tenantOrganizationId)
+      }
+      query += ' RETURNING *'
+      const result = await pool.query(query, values)
       return result.rows[0]
     } catch (error) {
       const activity = mockActivities.find(a => a.id === id)
@@ -103,9 +115,9 @@ export const activityModel = {
     }
   },
 
-  async delete(id: string) {
+  async delete(id: string, tenantOrganizationId: string) {
     try {
-      await pool.query('DELETE FROM activities WHERE id = $1', [id])
+      await pool.query('DELETE FROM activities WHERE id = $1 AND tenant_organization_id = $2', [id, tenantOrganizationId])
     } catch (error) {
       const index = mockActivities.findIndex(a => a.id === id)
       if (index > -1) {
@@ -114,13 +126,14 @@ export const activityModel = {
     }
   },
 
-  async getRecentActivities(limit = 20) {
+  async getRecentActivities(tenantOrganizationId: string, limit = 20) {
     try {
       const result = await pool.query(
         `SELECT a.*, c.first_name, c.last_name FROM activities a
          JOIN contacts c ON a.contact_id = c.id
-         ORDER BY a.created_at DESC LIMIT $1`,
-        [limit]
+         WHERE a.tenant_organization_id = $1
+         ORDER BY a.created_at DESC LIMIT $2`,
+        [tenantOrganizationId, limit]
       )
       return result.rows
     } catch (error) {
@@ -128,10 +141,11 @@ export const activityModel = {
     }
   },
 
-  async getActivityStats() {
+  async getActivityStats(tenantOrganizationId: string) {
     try {
       const result = await pool.query(
-        `SELECT type, COUNT(*) as count FROM activities GROUP BY type`
+        `SELECT type, COUNT(*) as count FROM activities WHERE tenant_organization_id = $1 GROUP BY type`,
+        [tenantOrganizationId]
       )
       return result.rows
     } catch (error) {

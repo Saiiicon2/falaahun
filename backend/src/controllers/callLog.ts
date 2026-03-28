@@ -3,10 +3,13 @@ import { callLogModel } from '../models/callLog'
 
 export const getContactCallLogs = async (req: Request, res: Response) => {
   try {
+    if (!req.user?.organizationId) {
+      return res.status(400).json({ success: false, error: 'Organization context is required' })
+    }
     const { contactId } = req.params
     const { limit = 50 } = req.query
 
-    const callLogs = await callLogModel.getByContact(contactId, parseInt(limit as string))
+    const callLogs = await callLogModel.getByContact(contactId, req.user.organizationId, parseInt(limit as string))
 
     res.json({ success: true, data: callLogs })
   } catch (error: any) {
@@ -16,6 +19,9 @@ export const getContactCallLogs = async (req: Request, res: Response) => {
 
 export const logCall = async (req: Request, res: Response) => {
   try {
+    if (!req.user?.organizationId) {
+      return res.status(400).json({ success: false, error: 'Organization context is required' })
+    }
     const { contactId } = req.params
     const { duration, direction, status, notes } = req.body
 
@@ -33,7 +39,8 @@ export const logCall = async (req: Request, res: Response) => {
       status,
       notes: notes || '',
       callDate: new Date(),
-      loggedBy: req.user!.id
+      loggedBy: req.user.id,
+      tenantOrganizationId: req.user.organizationId
     })
 
     res.status(201).json({ success: true, data: callLog })
@@ -44,6 +51,9 @@ export const logCall = async (req: Request, res: Response) => {
 
 export const updateCallLog = async (req: Request, res: Response) => {
   try {
+    if (!req.user?.organizationId) {
+      return res.status(400).json({ success: false, error: 'Organization context is required' })
+    }
     const { id } = req.params
     const { status, notes, duration } = req.body
 
@@ -51,7 +61,7 @@ export const updateCallLog = async (req: Request, res: Response) => {
       status,
       notes,
       duration
-    })
+    }, req.user.organizationId)
 
     res.json({ success: true, data: callLog })
   } catch (error: any) {
@@ -61,9 +71,12 @@ export const updateCallLog = async (req: Request, res: Response) => {
 
 export const getCallLog = async (req: Request, res: Response) => {
   try {
+    if (!req.user?.organizationId) {
+      return res.status(400).json({ success: false, error: 'Organization context is required' })
+    }
     const { id } = req.params
 
-    const callLog = await callLogModel.getById(id)
+    const callLog = await callLogModel.getById(id, req.user.organizationId)
 
     if (!callLog) {
       return res.status(404).json({ success: false, error: 'Call log not found' })

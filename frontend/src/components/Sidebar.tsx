@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
-import { LayoutDashboard, Users, FolderOpen, BarChart3, Building2, Settings, LogOut } from 'lucide-react'
+import { LayoutDashboard, Users, FolderOpen, BarChart3, Building2, Settings, CreditCard, LogOut } from 'lucide-react'
 
 function Sidebar() {
   const location = useLocation()
@@ -62,6 +62,18 @@ function Sidebar() {
           <FolderOpen className="w-5 h-5 mr-3" />
           <span className="font-medium">Projects</span>
         </Link>
+
+        <Link
+          to="/pledges"
+          className={`flex items-center px-4 py-3 rounded-lg transition duration-200 ${
+            isActive('/pledges')
+              ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30'
+              : 'text-slate-300 hover:bg-slate-700/50'
+          }`}
+        >
+          <span className="w-5 h-5 mr-3 flex items-center justify-center font-bold">$</span>
+          <span className="font-medium">Pledges</span>
+        </Link>
         
         <Link
           to="/reports"
@@ -85,6 +97,18 @@ function Sidebar() {
         >
           <Building2 className="w-5 h-5 mr-3" />
           <span className="font-medium">Organization</span>
+        </Link>
+
+        <Link
+          to="/billing"
+          className={`flex items-center px-4 py-3 rounded-lg transition duration-200 ${
+            isActive('/billing')
+              ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30'
+              : 'text-slate-300 hover:bg-slate-700/50'
+          }`}
+        >
+          <CreditCard className="w-5 h-5 mr-3" />
+          <span className="font-medium">Billing</span>
         </Link>
 
         <Link

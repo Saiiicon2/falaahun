@@ -1,6 +1,6 @@
 import pool from '../db/connection'
 import { v4 as uuidv4 } from 'uuid'
-import { Project, Deal } from '../types'
+import { Project } from '../types'
 
 // In-memory stores as fallback
 const mockProjects: any[] = []
@@ -8,35 +8,42 @@ const mockDeals: any[] = []
 const mockStages: any[] = []
 
 export const projectModel = {
-  async getAll(limit = 50, offset = 0) {
+  async getAll(tenantOrganizationId: string, limit = 50, offset = 0) {
     try {
       const result = await pool.query(
-        'SELECT * FROM projects ORDER BY created_at DESC LIMIT $1 OFFSET $2',
-        [limit, offset]
+        `SELECT *
+         FROM projects
+         WHERE tenant_organization_id = $1
+         ORDER BY created_at DESC
+         LIMIT $2 OFFSET $3`,
+        [tenantOrganizationId, limit, offset]
       )
       return result.rows
     } catch (error) {
       console.log('📝 Using mock project data')
-      return mockProjects.slice(offset, offset + limit)
+      return mockProjects
+        .filter((project) => project.tenant_organization_id === tenantOrganizationId)
+        .slice(offset, offset + limit)
     }
   },
 
-  async getById(id: string) {
+  async getById(id: string, tenantOrganizationId: string) {
     try {
       const result = await pool.query(
-        'SELECT * FROM projects WHERE id = $1',
-        [id]
+        'SELECT * FROM projects WHERE id = $1 AND tenant_organization_id = $2',
+        [id, tenantOrganizationId]
       )
       return result.rows[0]
     } catch (error) {
-      return mockProjects.find(p => p.id === id)
+      return mockProjects.find(p => p.id === id && p.tenant_organization_id === tenantOrganizationId)
     }
   },
 
-  async create(data: Partial<Project>) {
+  async create(data: Partial<Project> & { tenantOrganizationId: string }) {
     const id = uuidv4()
     const project = {
       id,
+      tenant_organization_id: data.tenantOrganizationId,
       name: data.name,
       description: data.description,
       budget: data.budget || 0,
@@ -49,10 +56,10 @@ export const projectModel = {
     
     try {
       const result = await pool.query(
-        `INSERT INTO projects (id, name, description, budget, status, occurrence)
-         VALUES ($1, $2, $3, $4, $5, $6)
+        `INSERT INTO projects (id, tenant_organization_id, name, description, budget, status, occurrence)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING *`,
-        [id, data.name, data.description, data.budget || 0, data.status || 'active', data.occurrence || 'one-time']
+        [id, data.tenantOrganizationId, data.name, data.description, data.budget || 0, data.status || 'active', data.occurrence || 'one-time']
       )
       return result.rows[0]
     } catch (error) {
@@ -66,7 +73,7 @@ export const projectModel = {
     }
   },
 
-  async update(id: string, data: Partial<Project>) {
+  async update(id: string, data: Partial<Project>, tenantOrganizationId: string) {
     const updates: string[] = []
     const values: any[] = []
     let paramCount = 1
@@ -93,12 +100,12 @@ export const projectModel = {
 
     try {
       const result = await pool.query(
-        `UPDATE projects SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING *`,
-        values
+        `UPDATE projects SET ${updates.join(', ')} WHERE id = $${paramCount} AND tenant_organization_id = $${paramCount + 1} RETURNING *`,
+        [...values, id, tenantOrganizationId]
       )
       return result.rows[0]
     } catch (error) {
-      const project = mockProjects.find(p => p.id === id)
+      const project = mockProjects.find(p => p.id === id && p.tenant_organization_id === tenantOrganizationId)
       if (project) {
         Object.assign(project, data)
         project.updated_at = new Date()
@@ -107,33 +114,36 @@ export const projectModel = {
     }
   },
 
-  async delete(id: string) {
+  async delete(id: string, tenantOrganizationId: string) {
     try {
-      await pool.query('DELETE FROM projects WHERE id = $1', [id])
+      await pool.query('DELETE FROM projects WHERE id = $1 AND tenant_organization_id = $2', [id, tenantOrganizationId])
     } catch (error) {
-      const index = mockProjects.findIndex(p => p.id === id)
+      const index = mockProjects.findIndex(p => p.id === id && p.tenant_organization_id === tenantOrganizationId)
       if (index > -1) {
         mockProjects.splice(index, 1)
       }
     }
   },
 
-  async getPipelineStages(projectId: string) {
+  async getPipelineStages(projectId: string, tenantOrganizationId: string) {
     try {
       const result = await pool.query(
-        'SELECT * FROM pipeline_stages WHERE project_id = $1 ORDER BY position ASC',
-        [projectId]
+        'SELECT * FROM pipeline_stages WHERE project_id = $1 AND tenant_organization_id = $2 ORDER BY position ASC',
+        [projectId, tenantOrganizationId]
       )
       return result.rows
     } catch (error) {
-      return mockStages.filter(s => s.project_id === projectId).sort((a, b) => a.position - b.position)
+      return mockStages
+        .filter(s => s.project_id === projectId && s.tenant_organization_id === tenantOrganizationId)
+        .sort((a, b) => a.position - b.position)
     }
   },
 
-  async addPipelineStage(projectId: string, name: string, position: number, targetAmount?: number) {
+  async addPipelineStage(projectId: string, tenantOrganizationId: string, name: string, position: number, targetAmount?: number) {
     const id = uuidv4()
     const stage = {
       id,
+      tenant_organization_id: tenantOrganizationId,
       project_id: projectId,
       name,
       position,
@@ -143,64 +153,113 @@ export const projectModel = {
     
     try {
       const result = await pool.query(
-        `INSERT INTO pipeline_stages (id, project_id, name, position, target_amount)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO pipeline_stages (id, tenant_organization_id, project_id, name, position, target_amount)
+         VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING *`,
-        [id, projectId, name, position, targetAmount]
+        [id, tenantOrganizationId, projectId, name, position, targetAmount]
       )
       return result.rows[0]
     } catch (error) {
       mockStages.push(stage)
       return stage
     }
+  },
+
+  async recalculateRaised(projectId: string, tenantOrganizationId: string) {
+    try {
+      const result = await pool.query(
+        `SELECT COALESCE(SUM(p.amount), 0) as total_received
+         FROM pledges p
+         LEFT JOIN deals d ON p.deal_id = d.id
+         LEFT JOIN contacts c ON p.contact_id = c.id
+         WHERE p.status = 'received'
+           AND p.tenant_organization_id = $1
+           AND (d.project_id = $2 OR (p.deal_id IS NULL AND c.project_id = $2))`,
+        [tenantOrganizationId, projectId]
+      )
+
+      const totalReceived = Number(result.rows[0]?.total_received || 0)
+
+      await pool.query(
+        `UPDATE projects
+         SET raised = $1, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $2 AND tenant_organization_id = $3`,
+        [totalReceived, projectId, tenantOrganizationId]
+      )
+
+      return totalReceived
+    } catch (error) {
+      return null
+    }
   }
 }
 
+interface DealInput {
+  tenantOrganizationId: string
+  projectId: string
+  title: string
+  amount: number
+  stageId?: string
+  contactId?: string
+  status?: string
+}
+
+interface DealUpdateInput {
+  title?: string
+  amount?: number
+  stageId?: string
+  contactId?: string
+  status?: string
+}
+
 export const dealModel = {
-  async getByProject(projectId: string) {
+  async getByProject(projectId: string, tenantOrganizationId: string) {
     try {
       const result = await pool.query(
-        'SELECT * FROM deals WHERE project_id = $1 ORDER BY created_at DESC',
-        [projectId]
+        'SELECT * FROM deals WHERE project_id = $1 AND tenant_organization_id = $2 ORDER BY created_at DESC',
+        [projectId, tenantOrganizationId]
       )
       return result.rows
     } catch (error) {
-      return mockDeals.filter(d => d.project_id === projectId).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      return mockDeals
+        .filter(d => d.project_id === projectId && d.tenant_organization_id === tenantOrganizationId)
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     }
   },
 
-  async getById(id: string) {
+  async getById(id: string, tenantOrganizationId: string) {
     try {
       const result = await pool.query(
-        'SELECT * FROM deals WHERE id = $1',
-        [id]
+        'SELECT * FROM deals WHERE id = $1 AND tenant_organization_id = $2',
+        [id, tenantOrganizationId]
       )
       return result.rows[0]
     } catch (error) {
-      return mockDeals.find(d => d.id === id)
+      return mockDeals.find(d => d.id === id && d.tenant_organization_id === tenantOrganizationId)
     }
   },
 
-  async create(data: Partial<Deal>) {
+  async create(data: DealInput) {
     const id = uuidv4()
     const deal = {
       id,
+      tenant_organization_id: data.tenantOrganizationId,
       project_id: data.projectId,
       title: data.title,
       amount: data.amount,
-      stage_id: data.id,
-      contact_id: data.id,
-      status: 'pending',
+      stage_id: data.stageId,
+      contact_id: data.contactId,
+      status: data.status || 'pending',
       created_at: new Date(),
       updated_at: new Date()
     }
     
     try {
       const result = await pool.query(
-        `INSERT INTO deals (id, project_id, title, amount, stage_id, contact_id, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `INSERT INTO deals (id, tenant_organization_id, project_id, title, amount, stage_id, contact_id, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING *`,
-        [id, data.projectId, data.title, data.amount, data.id, data.id, 'pending']
+        [id, data.tenantOrganizationId, data.projectId, data.title, data.amount, data.stageId, data.contactId, data.status || 'pending']
       )
       return result.rows[0]
     } catch (error) {
@@ -209,7 +268,7 @@ export const dealModel = {
     }
   },
 
-  async update(id: string, data: Partial<Deal>) {
+  async update(id: string, data: DealUpdateInput, tenantOrganizationId: string) {
     const updates: string[] = []
     const values: any[] = []
     let paramCount = 1
@@ -222,9 +281,17 @@ export const dealModel = {
       updates.push(`amount = $${paramCount++}`)
       values.push(data.amount)
     }
-    if (data.id) {
+    if (data.stageId) {
       updates.push(`stage_id = $${paramCount++}`)
-      values.push(data.id)
+      values.push(data.stageId)
+    }
+    if (data.contactId) {
+      updates.push(`contact_id = $${paramCount++}`)
+      values.push(data.contactId)
+    }
+    if (data.status) {
+      updates.push(`status = $${paramCount++}`)
+      values.push(data.status)
     }
 
     updates.push(`updated_at = CURRENT_TIMESTAMP`)
@@ -232,12 +299,12 @@ export const dealModel = {
 
     try {
       const result = await pool.query(
-        `UPDATE deals SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING *`,
-        values
+        `UPDATE deals SET ${updates.join(', ')} WHERE id = $${paramCount} AND tenant_organization_id = $${paramCount + 1} RETURNING *`,
+        [...values, id, tenantOrganizationId]
       )
       return result.rows[0]
     } catch (error) {
-      const deal = mockDeals.find(d => d.id === id)
+      const deal = mockDeals.find(d => d.id === id && d.tenant_organization_id === tenantOrganizationId)
       if (deal) {
         Object.assign(deal, data)
         deal.updated_at = new Date()
@@ -246,11 +313,11 @@ export const dealModel = {
     }
   },
 
-  async delete(id: string) {
+  async delete(id: string, tenantOrganizationId: string) {
     try {
-      await pool.query('DELETE FROM deals WHERE id = $1', [id])
+      await pool.query('DELETE FROM deals WHERE id = $1 AND tenant_organization_id = $2', [id, tenantOrganizationId])
     } catch (error) {
-      const index = mockDeals.findIndex(d => d.id === id)
+      const index = mockDeals.findIndex(d => d.id === id && d.tenant_organization_id === tenantOrganizationId)
       if (index > -1) {
         mockDeals.splice(index, 1)
       }

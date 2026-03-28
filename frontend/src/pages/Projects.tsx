@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Plus, Trash2, TrendingUp, ChevronDown, ChevronUp } from 'lucide-react'
-import { projectService, contactService } from '../services/api'
+import { projectService, contactService, pledgeService } from '../services/api'
 
 interface Project {
   id: string
@@ -42,6 +42,13 @@ interface ProjectContacts {
   [projectId: string]: Contact[]
 }
 
+interface PledgeStats {
+  total_pledges: number
+  total_amount: number
+  total_received: number
+  total_pending: number
+}
+
 function Projects() {
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
@@ -66,6 +73,7 @@ function Projects() {
   const [_deals, _setDeals] = useState<Deal[]>([])
   const [_pledges, _setPledges] = useState<any[]>([])
   const [projectContacts, setProjectContacts] = useState<ProjectContacts>({})
+  const [projectPledgeStats, setProjectPledgeStats] = useState<Record<string, PledgeStats>>({})
 
   useEffect(() => {
     fetchProjects()
@@ -80,11 +88,31 @@ function Projects() {
       // Fetch contacts for each project
       projectsData.forEach((project: Project) => {
         fetchProjectContacts(project.id)
+        fetchProjectPledgeStats(project.id)
       })
     } catch (error) {
       console.error('Error fetching projects:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchProjectPledgeStats = async (projectId: string) => {
+    try {
+      const response = await pledgeService.getStats(projectId)
+      if (response.data.success && response.data.data) {
+        setProjectPledgeStats((prev) => ({
+          ...prev,
+          [projectId]: {
+            total_pledges: Number(response.data.data.total_pledges || 0),
+            total_amount: Number(response.data.data.total_amount || 0),
+            total_received: Number(response.data.data.total_received || 0),
+            total_pending: Number(response.data.data.total_pending || 0),
+          },
+        }))
+      }
+    } catch (error) {
+      console.error('Error fetching pledge stats:', error)
     }
   }
 
@@ -374,7 +402,26 @@ function Projects() {
                     {/* Pledges Summary */}
                     <div className="bg-white rounded-lg p-4 border border-slate-200">
                       <h4 className="font-semibold text-slate-900 mb-3">Pledges & Donations</h4>
-                      <p className="text-sm text-slate-600">Track all pledges and donations for this project</p>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="bg-slate-50 rounded p-3">
+                          <p className="text-xs text-slate-500">Total Pledges</p>
+                          <p className="text-lg font-semibold text-slate-900 mt-1">
+                            {projectPledgeStats[project.id]?.total_pledges || 0}
+                          </p>
+                        </div>
+                        <div className="bg-slate-50 rounded p-3">
+                          <p className="text-xs text-slate-500">Received</p>
+                          <p className="text-lg font-semibold text-emerald-700 mt-1">
+                            ${(projectPledgeStats[project.id]?.total_received || 0).toLocaleString()}
+                          </p>
+                        </div>
+                        <div className="bg-slate-50 rounded p-3">
+                          <p className="text-xs text-slate-500">Pending</p>
+                          <p className="text-lg font-semibold text-amber-700 mt-1">
+                            ${(projectPledgeStats[project.id]?.total_pending || 0).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}

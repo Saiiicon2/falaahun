@@ -3,8 +3,6 @@ import axios from 'axios'
 // Use environment variable or fallback to production API URL
 const API_URL = import.meta.env.VITE_API_URL || 'https://falaahun.onrender.com'
 
-console.log('API URL:', API_URL) // Debug log
-
 const api = axios.create({
   baseURL: API_URL,
 })
@@ -19,11 +17,11 @@ api.interceptors.request.use((config) => {
 })
 
 export const authService = {
-  register: (email: string, password: string, name: string) =>
-    api.post('/auth/register', { email, password, name }),
+  register: (email: string, password: string, name: string, organizationName: string) =>
+    api.post('/auth/register', { email, password, name, organizationName }),
   
-  login: (email: string, password: string) =>
-    api.post('/auth/login', { email, password }),
+  login: (email: string, password: string, organizationId?: string) =>
+    api.post('/auth/login', { email, password, organizationId }),
   
   getProfile: () => api.get('/auth/profile'),
   
@@ -31,8 +29,10 @@ export const authService = {
 }
 
 export const contactService = {
-  getAll: (limit = 50, offset = 0) =>
-    api.get('/contacts', { params: { limit, offset } }),
+  getAll: (params: any = {}) => {
+    const { limit = 50, offset = 0, ...filters } = params
+    return api.get('/contacts', { params: { limit, offset, ...filters } })
+  },
   
   getOne: (id: string) => api.get(`/contacts/${id}`),
   
@@ -191,6 +191,34 @@ export const integrationService = {
   getStatus: () => api.get('/integrations/status'),
   
   testHubSpot: () => api.post('/integrations/hubspot/test')
+}
+
+export const pledgeService = {
+  getAll: (params?: { limit?: number; offset?: number; contactId?: string; projectId?: string; dealId?: string }) =>
+    api.get('/pledges', { params }),
+
+  getOne: (id: string) => api.get(`/pledges/${id}`),
+
+  create: (data: any) => api.post('/pledges', data),
+
+  update: (id: string, data: any) => api.put(`/pledges/${id}`, data),
+
+  delete: (id: string) => api.delete(`/pledges/${id}`),
+
+  getStats: (projectId?: string) =>
+    api.get('/pledges/stats', {
+      params: projectId ? { projectId } : undefined,
+    }),
+}
+
+export const billingService = {
+  getStatus: () => api.get('/billing/status'),
+
+  createCheckoutSession: (priceId: string, successUrl?: string, cancelUrl?: string) =>
+    api.post('/billing/checkout-session', { priceId, successUrl, cancelUrl }),
+
+  createPortalSession: (returnUrl?: string) =>
+    api.post('/billing/portal-session', { returnUrl }),
 }
 
 export default api
