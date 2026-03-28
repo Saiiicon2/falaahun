@@ -83,7 +83,14 @@ initializeDatabase()
     })
   })
   .catch((error) => {
-    console.log('⚠️  Starting server despite initialization warning')
+    const isProduction = (process.env.NODE_ENV || 'development') === 'production'
+
+    if (isProduction) {
+      console.error('❌ Database initialization failed in production. Server will not start.')
+      process.exit(1)
+    }
+
+    console.log('⚠️  Starting server despite initialization warning (development mode)')
     app.listen(PORT, () => {
       console.log(`✅ Dawah CRM API running on port ${PORT}`)
       console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`)
