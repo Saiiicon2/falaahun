@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS contacts (
   email VARCHAR(255),
   phone VARCHAR(20),
   organization_id UUID REFERENCES organizations(id) ON DELETE SET NULL,
-  project_id UUID REFERENCES projects(id) ON DELETE SET NULL,
+  project_id UUID,
   lead_status VARCHAR(50) DEFAULT 'lead', -- lead, prospect, customer, past_customer
   assigned_to UUID REFERENCES users(id) ON DELETE SET NULL, -- Assigned salesperson
   labels VARCHAR(255)[],

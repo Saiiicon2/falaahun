@@ -12,6 +12,7 @@ export interface OrganizationMembership {
 }
 
 const mockMemberships: OrganizationMembership[] = []
+const canUseMockFallback = process.env.NODE_ENV !== 'production'
 
 export const organizationMembershipModel = {
   async create(organizationId: string, userId: string, role = 'member') {
@@ -43,6 +44,7 @@ export const organizationMembershipModel = {
 
       return result.rows[0]
     } catch (error) {
+      if (!canUseMockFallback) throw error
       mockMemberships.push(membership)
       return membership
     }
@@ -61,6 +63,7 @@ export const organizationMembershipModel = {
 
       return result.rows
     } catch (error) {
+      if (!canUseMockFallback) throw error
       return mockMemberships.filter((membership) => membership.user_id === userId && membership.status === 'active')
     }
   },
@@ -76,6 +79,7 @@ export const organizationMembershipModel = {
 
       return result.rows[0] || null
     } catch (error) {
+      if (!canUseMockFallback) throw error
       return (
         mockMemberships.find(
           (membership) =>

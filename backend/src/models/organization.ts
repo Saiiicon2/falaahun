@@ -31,6 +31,7 @@ const mockOrganizations: Organization[] = [
     updated_at: new Date(),
   },
 ]
+const canUseMockFallback = process.env.NODE_ENV !== 'production'
 
 const toSlug = (value: string) =>
   value
@@ -45,6 +46,7 @@ const organizationModel = {
       const result = await pool.query('SELECT * FROM organizations ORDER BY created_at DESC')
       return result.rows
     } catch (error: any) {
+      if (!canUseMockFallback) throw error
       console.error('❌ Failed to fetch organizations from database:', error?.message)
       console.log('Using mock storage for organizations')
       return mockOrganizations
@@ -56,6 +58,7 @@ const organizationModel = {
       const result = await pool.query('SELECT * FROM organizations WHERE id = $1', [id])
       return result.rows[0] || null
     } catch (error) {
+      if (!canUseMockFallback) throw error
       return mockOrganizations.find((org) => org.id === id) || null
     }
   },
@@ -73,6 +76,7 @@ const organizationModel = {
 
       return result.rows
     } catch (error) {
+      if (!canUseMockFallback) throw error
       return mockOrganizations
     }
   },
@@ -104,6 +108,7 @@ const organizationModel = {
       )
       return result.rows[0]
     } catch (error) {
+      if (!canUseMockFallback) throw error
       const newOrg = {
         id,
         ...organization,
@@ -136,6 +141,7 @@ const organizationModel = {
       )
       return result.rows[0]
     } catch (error) {
+      if (!canUseMockFallback) throw error
       const index = mockOrganizations.findIndex((org) => org.id === id)
       if (index !== -1) {
         mockOrganizations[index] = {
@@ -159,6 +165,7 @@ const organizationModel = {
       )
       return result.rows[0]
     } catch (error) {
+      if (!canUseMockFallback) throw error
       const index = mockOrganizations.findIndex((org) => org.id === id)
       if (index !== -1) {
         mockOrganizations[index] = {
@@ -178,6 +185,7 @@ const organizationModel = {
       await pool.query('DELETE FROM organizations WHERE id = $1', [id])
       return true
     } catch (error) {
+      if (!canUseMockFallback) throw error
       const index = mockOrganizations.findIndex((org) => org.id === id)
       if (index !== -1) {
         mockOrganizations.splice(index, 1)

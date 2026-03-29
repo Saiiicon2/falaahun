@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs'
 
 // Mock storage for demo/offline mode
 const mockUsers: any[] = []
+const canUseMockFallback = process.env.NODE_ENV !== 'production'
 
 export const userModel = {
   async getById(id: string) {
@@ -14,6 +15,7 @@ export const userModel = {
       )
       return result.rows[0]
     } catch (error) {
+      if (!canUseMockFallback) throw error
       return mockUsers.find(u => u.id === id)
     }
   },
@@ -26,6 +28,7 @@ export const userModel = {
       )
       return result.rows[0]
     } catch (error) {
+      if (!canUseMockFallback) throw error
       return mockUsers.find(u => u.email === email)
     }
   },
@@ -52,6 +55,7 @@ export const userModel = {
       )
       return result.rows[0]
     } catch (error) {
+      if (!canUseMockFallback) throw error
       mockUsers.push(user)
       return { id: user.id, email: user.email, name: user.name, role: user.role, created_at: user.created_at }
     }
@@ -74,6 +78,7 @@ export const userModel = {
       )
       return result.rows
     } catch (error) {
+      if (!canUseMockFallback) throw error
       return mockUsers.map(u => ({
         id: u.id,
         email: u.email,
@@ -96,6 +101,7 @@ export const userModel = {
       )
       return result.rows
     } catch (error) {
+      if (!canUseMockFallback) throw error
       return mockUsers.map(u => ({
         id: u.id,
         email: u.email,
