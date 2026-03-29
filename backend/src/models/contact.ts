@@ -4,6 +4,7 @@ import { Contact } from '../types'
 
 // In-memory store as fallback when database is unavailable
 const mockContacts: any[] = []
+const canUseMockFallback = process.env.NODE_ENV !== 'production'
 
 const isUuid = (value: unknown): value is string => {
   if (typeof value !== 'string') return false
@@ -43,6 +44,7 @@ export const contactModel = {
       )
       return result.rows
     } catch (error: any) {
+      if (!canUseMockFallback) throw error
       return mockContacts
         .filter((contact) => contact.tenant_organization_id === tenantOrganizationId)
         .slice(offset, offset + limit)
@@ -59,6 +61,7 @@ export const contactModel = {
         : await pool.query('SELECT * FROM contacts WHERE id = $1', [id])
       return result.rows[0]
     } catch (error) {
+      if (!canUseMockFallback) throw error
       return mockContacts.find(
         (contact) => contact.id === id && (!tenantOrganizationId || contact.tenant_organization_id === tenantOrganizationId)
       )
@@ -172,6 +175,7 @@ export const contactModel = {
           )
       return result.rows[0] || null
     } catch (error) {
+      if (!canUseMockFallback) throw error
       const contact = mockContacts.find(
         (item) => item.id === id && (!tenantOrganizationId || item.tenant_organization_id === tenantOrganizationId)
       )
@@ -190,6 +194,7 @@ export const contactModel = {
         [id, tenantOrganizationId]
       )
     } catch (error) {
+      if (!canUseMockFallback) throw error
       const index = mockContacts.findIndex(
         (contact) => contact.id === id && contact.tenant_organization_id === tenantOrganizationId
       )
@@ -211,6 +216,7 @@ export const contactModel = {
       )
       return result.rows
     } catch (error) {
+      if (!canUseMockFallback) throw error
       return mockContacts.filter(
         (contact) =>
           contact.tenant_organization_id === tenantOrganizationId &&
@@ -299,6 +305,7 @@ export const contactModel = {
       )
       return result.rows
     } catch (error: any) {
+      if (!canUseMockFallback) throw error
       return this._filterMockContacts(filters)
     }
   },
