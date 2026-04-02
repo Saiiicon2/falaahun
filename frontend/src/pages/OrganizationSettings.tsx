@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Upload, Trash2, Settings, AlertCircle, CheckCircle } from 'lucide-react'
-import { organizationService } from '../services/api'
+import { organizationService, resolveApiUrl } from '../services/api'
 
 interface Organization {
   id: string
@@ -223,7 +223,7 @@ function OrganizationSettings() {
                     <div className="flex items-center gap-3">
                       {org.logo_url && (
                         <img
-                          src={org.logo_url}
+                          src={resolveApiUrl(org.logo_url)}
                           alt={org.name}
                           className="w-8 h-8 rounded object-cover"
                         />
@@ -254,7 +254,7 @@ function OrganizationSettings() {
                     {selectedOrg.logo_url ? (
                       <div className="flex flex-col items-center">
                         <img
-                          src={selectedOrg.logo_url}
+                          src={resolveApiUrl(selectedOrg.logo_url)}
                           alt={selectedOrg.name}
                           className="w-32 h-32 rounded-lg object-cover mb-4 border border-slate-200"
                         />

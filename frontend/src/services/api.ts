@@ -1,7 +1,22 @@
 import axios from 'axios'
 
 // Use environment variable or fallback to production API URL
-const API_URL = import.meta.env.VITE_API_URL || 'https://falaahun.onrender.com'
+export const API_URL = import.meta.env.VITE_API_URL || 'https://falaahun.onrender.com'
+
+export const resolveApiUrl = (url?: string) => {
+  if (!url) {
+    return ''
+  }
+
+  if (/^https?:\/\//i.test(url)) {
+    return url
+  }
+
+  const normalizedBaseUrl = API_URL.endsWith('/') ? API_URL.slice(0, -1) : API_URL
+  const normalizedPath = url.startsWith('/') ? url : `/${url}`
+
+  return `${normalizedBaseUrl}${normalizedPath}`
+}
 
 const api = axios.create({
   baseURL: API_URL,
