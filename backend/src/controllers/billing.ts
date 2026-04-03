@@ -1,6 +1,30 @@
 import { Request, Response } from 'express'
 import Stripe from 'stripe'
 import pool from '../db/connection'
+import {
+  buildCheckoutParams,
+  verifyItn,
+  PAYFAST_SANDBOX_URL,
+  PAYFAST_LIVE_URL,
+} from '../services/payfast'
+
+const isSandbox = () =>
+  process.env.PAYFAST_SANDBOX === 'true' || process.env.NODE_ENV !== 'production'
+
+const PLANS: Record<string, { label: string; amount: string }> = {
+  starter: {
+    label:  'Falaahun CRM – Starter',
+    amount: process.env.PAYFAST_PLAN_STARTER_AMOUNT || '350.00',
+  },
+  pro: {
+    label:  'Falaahun CRM – Pro',
+    amount: process.env.PAYFAST_PLAN_PRO_AMOUNT || '900.00',
+  },
+  team: {
+    label:  'Falaahun CRM – Team',
+    amount: process.env.PAYFAST_PLAN_TEAM_AMOUNT || '1800.00',
+  },
+}
 
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || ''
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || ''
@@ -105,30 +129,37 @@ const upsertSubscriptionFromStripe = async (
 export const getBillingStatus = async (req: Request, res: Response) => {
   try {
     const organizationId = req.user?.organizationId
-
     if (!organizationId) {
       return res.status(400).json({ success: false, error: 'Organization context is required' })
     }
 
-    const orgResult = await pool.query(
-      'SELECT id, name, email, stripe_customer_id FROM organizations WHERE id = $1',
-      [organizationId]
-    )
-
-    const subscriptionResult = await pool.query(
-      `SELECT *
-       FROM organization_subscriptions
-       WHERE organization_id = $1
-       ORDER BY updated_at DESC
-       LIMIT 1`,
-      [organizationId]
-    )
+    const [orgResult, subResult] = await Promise.all([
+      pool.query(
+        'SELECT id, name, email, billing_email FROM organizations WHERE id = $1',
+        [organizationId]
+      ),
+      pool.query(
+        `SELECT plan_key, status, current_period_end, cancel_at_period_end, subscription_token
+         FROM organization_subscriptions
+         WHERE organization_id = $1
+         ORDER BY updated_at DESC
+         LIMIT 1`,
+        [organizationId]
+      ),
+    ])
 
     res.json({
       success: true,
       data: {
         organization: orgResult.rows[0] || null,
-        subscription: subscriptionResult.rows[0] || null,
+        subscription: subResult.rows[0] || null,
+        plans: Object.entries(PLANS).map(([key, cfg]) => ({
+          key,
+          label:    cfg.label,
+          amount:   cfg.amount,
+          currency: 'ZAR',
+        })),
+        sandbox: isSandbox(),
       },
     })
   } catch (error: any) {
@@ -136,175 +167,167 @@ export const getBillingStatus = async (req: Request, res: Response) => {
   }
 }
 
-export const createCheckoutSession = async (req: Request, res: Response) => {
+export const createPayfastCheckout = async (req: Request, res: Response) => {
   try {
     const organizationId = req.user?.organizationId
-    const { priceId, successUrl, cancelUrl } = req.body
+    const { planKey, successUrl, cancelUrl } = req.body
 
     if (!organizationId) {
       return res.status(400).json({ success: false, error: 'Organization context is required' })
     }
 
-    if (!priceId) {
-      return res.status(400).json({ success: false, error: 'priceId is required' })
+    const plan = PLANS[planKey as string]
+    if (!plan) {
+      return res.status(400).json({ success: false, error: `Unknown plan: ${planKey}` })
     }
 
-    const stripe = getStripe()
-    if (!stripe) {
-      return res.status(500).json({ success: false, error: 'Stripe is not configured. Set STRIPE_SECRET_KEY.' })
-    }
-
-    const organization = await getOrganizationById(organizationId)
-    if (!organization) {
-      return res.status(404).json({ success: false, error: 'Organization not found' })
-    }
-
-    let customerId: string = organization.stripe_customer_id
-
-    if (!customerId) {
-      const customer = await stripe.customers.create({
-        name: organization.name,
-        email: organization.email || undefined,
-        metadata: { organizationId },
+    const merchantId  = process.env.PAYFAST_MERCHANT_ID
+    const merchantKey = process.env.PAYFAST_MERCHANT_KEY
+    if (!merchantId || !merchantKey) {
+      return res.status(500).json({
+        success: false,
+        error: 'PayFast is not configured. Set PAYFAST_MERCHANT_ID and PAYFAST_MERCHANT_KEY.',
       })
-      customerId = customer.id
-      await updateOrganizationCustomer(organizationId, customerId)
     }
 
-    const baseUrl = getBaseUrl()
-    const session = await stripe.checkout.sessions.create({
-      mode: 'subscription',
-      customer: customerId,
-      line_items: [{ price: priceId, quantity: 1 }],
-      success_url: successUrl || `${baseUrl}/billing?checkout=success`,
-      cancel_url: cancelUrl || `${baseUrl}/billing?checkout=cancel`,
-      allow_promotion_codes: true,
-      metadata: {
-        organizationId,
-      },
-      subscription_data: {
-        metadata: {
-          organizationId,
-        },
-      },
-    })
-
-    res.json({ success: true, data: { url: session.url, id: session.id } })
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message })
-  }
-}
-
-export const createPortalSession = async (req: Request, res: Response) => {
-  try {
-    const organizationId = req.user?.organizationId
-    const { returnUrl } = req.body
-
-    if (!organizationId) {
-      return res.status(400).json({ success: false, error: 'Organization context is required' })
-    }
-
-    const stripe = getStripe()
-    if (!stripe) {
-      return res.status(500).json({ success: false, error: 'Stripe is not configured. Set STRIPE_SECRET_KEY.' })
-    }
-
-    const organization = await getOrganizationById(organizationId)
-    if (!organization) {
+    const orgResult = await pool.query(
+      'SELECT id, name, email, billing_email FROM organizations WHERE id = $1',
+      [organizationId]
+    )
+    const org = orgResult.rows[0]
+    if (!org) {
       return res.status(404).json({ success: false, error: 'Organization not found' })
     }
 
-    if (!organization.stripe_customer_id) {
-      return res.status(400).json({ success: false, error: 'No Stripe customer found. Start a subscription first.' })
-    }
+    const baseUrl    = process.env.CLIENT_URL || 'http://localhost:5173'
+    const backendUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 3000}`
+    const notifyUrl  = process.env.PAYFAST_NOTIFY_URL || `${backendUrl}/billing/payfast/itn`
+    const mPaymentId = `${organizationId}_${planKey}_${Date.now()}`
 
-    const baseUrl = getBaseUrl()
-    const session = await stripe.billingPortal.sessions.create({
-      customer: organization.stripe_customer_id,
-      return_url: returnUrl || `${baseUrl}/billing`,
+    const fields = buildCheckoutParams({
+      merchantId,
+      merchantKey,
+      passphrase:  process.env.PAYFAST_PASSPHRASE || undefined,
+      returnUrl:   successUrl || `${baseUrl}/billing?checkout=success`,
+      cancelUrl:   cancelUrl  || `${baseUrl}/billing?checkout=cancel`,
+      notifyUrl,
+      nameFirst:   org.name || 'Organization',
+      nameLast:    ' ',
+      email:       org.billing_email || org.email || 'billing@falaahun.org',
+      mPaymentId,
+      amount:      plan.amount,
+      itemName:    plan.label,
+      isRecurring: true,
     })
 
-    res.json({ success: true, data: { url: session.url } })
+    res.json({
+      success: true,
+      data: {
+        checkoutUrl: isSandbox() ? PAYFAST_SANDBOX_URL : PAYFAST_LIVE_URL,
+        fields,
+        sandbox: isSandbox(),
+      },
+    })
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message })
   }
 }
 
-export const handleStripeWebhook = async (req: Request, res: Response) => {
+// ---------------------------------------------------------------------------
+// POST /billing/payfast/itn  (PayFast sends this, not the browser)
+// Must respond 200 immediately; verification+processing is async.
+// ---------------------------------------------------------------------------
+
+export const handlePayfastItn = async (req: Request, res: Response) => {
+  res.status(200).send('OK')
+
   try {
-    const stripe = getStripe()
-    if (!stripe) {
-      return res.status(500).send('Stripe is not configured')
+    const body: Record<string, string> = req.body
+    const sandbox = isSandbox()
+
+    // 1  Verify with PayFast
+    const valid = await verifyItn(body, sandbox)
+    if (!valid) {
+      console.warn('[PayFast ITN] Verification failed', body)
+      return
     }
 
-    if (!STRIPE_WEBHOOK_SECRET) {
-      return res.status(500).send('Webhook secret is not configured')
+    // 2  Only process completed payments
+    if (body.payment_status !== 'COMPLETE') {
+      console.log('[PayFast ITN] Non-complete status:', body.payment_status)
+      return
     }
 
-    const signature = req.headers['stripe-signature']
-    if (!signature || typeof signature !== 'string') {
-      return res.status(400).send('Missing stripe-signature header')
+    // 3  Decode m_payment_id → organizationId + planKey
+    //    Format: {uuid}_{planKey}_{timestamp}  (UUID uses hyphens only, safe split on _)
+    const parts          = (body.m_payment_id || '').split('_')
+    const organizationId = parts[0]
+    const planKey        = parts[1]
+
+    if (!organizationId || !planKey) {
+      console.warn('[PayFast ITN] Cannot parse m_payment_id:', body.m_payment_id)
+      return
     }
 
-    const event = stripe.webhooks.constructEvent(req.body, signature, STRIPE_WEBHOOK_SECRET)
-
-    switch (event.type) {
-      case 'checkout.session.completed': {
-        const session = event.data.object as Stripe.Checkout.Session
-        if (session.mode === 'subscription' && session.subscription) {
-          const subscription = await stripe.subscriptions.retrieve(session.subscription as string)
-          const metadataOrganizationId = subscription.metadata?.organizationId || session.metadata?.organizationId
-
-          if (metadataOrganizationId) {
-            await upsertSubscriptionFromStripe(
-              metadataOrganizationId,
-              typeof session.customer === 'string' ? session.customer : null,
-              subscription
-            )
-          }
-        }
-        break
+    // 4  Idempotency – skip if already processed
+    const pfPaymentId = body.pf_payment_id
+    if (pfPaymentId) {
+      const insert = await pool.query(
+        `INSERT INTO webhook_events
+           (id, organization_id, provider, event_type, provider_reference, payload_json, processed)
+         VALUES (gen_random_uuid(), $1, 'payfast', 'subscription_payment', $2, $3, true)
+         ON CONFLICT (provider, provider_reference) DO NOTHING`,
+        [organizationId, pfPaymentId, JSON.stringify(body)]
+      )
+      if (insert.rowCount === 0) {
+        console.log('[PayFast ITN] Already processed, skipping:', pfPaymentId)
+        return
       }
-      case 'customer.subscription.updated':
-      case 'customer.subscription.created':
-      case 'customer.subscription.deleted': {
-        const subscription = event.data.object as Stripe.Subscription
-        const metadataOrganizationId = subscription.metadata?.organizationId
-
-        if (metadataOrganizationId) {
-          await upsertSubscriptionFromStripe(
-            metadataOrganizationId,
-            typeof subscription.customer === 'string' ? subscription.customer : null,
-            subscription
-          )
-        }
-        break
-      }
-      case 'invoice.payment_failed':
-      case 'invoice.paid': {
-        const invoice = event.data.object as Stripe.Invoice
-        const stripeSubscriptionId =
-          typeof (invoice as any).subscription === 'string' ? (invoice as any).subscription : null
-
-        if (stripeSubscriptionId) {
-          const subscription = await stripe.subscriptions.retrieve(stripeSubscriptionId)
-          const metadataOrganizationId = subscription.metadata?.organizationId
-          if (metadataOrganizationId) {
-            await upsertSubscriptionFromStripe(
-              metadataOrganizationId,
-              typeof subscription.customer === 'string' ? subscription.customer : null,
-              subscription
-            )
-          }
-        }
-        break
-      }
-      default:
-        break
     }
 
-    return res.json({ received: true })
+    // 5  Upsert subscription
+    const token          = body.token || null
+    const subscriptionId = token || `pf_${pfPaymentId || Date.now()}`
+
+    await pool.query(
+      `INSERT INTO organization_subscriptions
+         (id, organization_id, provider, provider_subscription_id,
+          plan_key, status, subscription_token, metadata, created_at, updated_at)
+       VALUES
+         (gen_random_uuid(), $1, 'payfast', $2, $3, 'active', $4, $5,
+          CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+       ON CONFLICT (provider_subscription_id) DO UPDATE SET
+         status             = 'active',
+         plan_key           = EXCLUDED.plan_key,
+         subscription_token = EXCLUDED.subscription_token,
+         metadata           = EXCLUDED.metadata,
+         updated_at         = CURRENT_TIMESTAMP`,
+      [organizationId, subscriptionId, planKey, token, JSON.stringify(body)]
+    )
+
+    console.log(`[PayFast ITN] ✅ Subscription activated: org=${organizationId} plan=${planKey}`)
   } catch (error: any) {
-    return res.status(400).send(`Webhook Error: ${error.message}`)
+    console.error('[PayFast ITN] Handler error:', error.message)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// POST /billing/payfast/cancel-itn  (subscription cancellation notifications)
+// ---------------------------------------------------------------------------
+
+export const handlePayfastCancelItn = async (req: Request, res: Response) => {
+  res.status(200).send('OK')
+  try {
+    const token = req.body?.token
+    if (!token) return
+    await pool.query(
+      `UPDATE organization_subscriptions
+       SET status = 'canceled', updated_at = CURRENT_TIMESTAMP
+       WHERE subscription_token = $1`,
+      [token]
+    )
+    console.log('[PayFast Cancel ITN] Subscription canceled, token:', token)
+  } catch (error: any) {
+    console.error('[PayFast Cancel ITN] Error:', error.message)
   }
 }

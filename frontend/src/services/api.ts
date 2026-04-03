@@ -229,11 +229,22 @@ export const pledgeService = {
 export const billingService = {
   getStatus: () => api.get('/billing/status'),
 
-  createCheckoutSession: (priceId: string, successUrl?: string, cancelUrl?: string) =>
-    api.post('/billing/checkout-session', { priceId, successUrl, cancelUrl }),
+  createPayfastCheckout: (planKey: string, successUrl?: string, cancelUrl?: string) =>
+    api.post('/billing/payfast/checkout', { planKey, successUrl, cancelUrl }),
+}
 
-  createPortalSession: (returnUrl?: string) =>
-    api.post('/billing/portal-session', { returnUrl }),
+export const paymentProfileService = {
+  get: () => api.get('/payment-profiles'),
+
+  save: (data: {
+    merchant_id: string
+    merchant_key: string
+    passphrase?: string
+    mode: 'sandbox' | 'live'
+    donations_enabled: boolean
+  }) => api.put('/payment-profiles', data),
+
+  remove: () => api.delete('/payment-profiles'),
 }
 
 export default api

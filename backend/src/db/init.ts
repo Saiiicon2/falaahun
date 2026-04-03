@@ -329,7 +329,45 @@ const initializeDatabase = async () => {
     await pool.query('CREATE INDEX IF NOT EXISTS idx_org_subscriptions_org ON organization_subscriptions(organization_id);')
     await pool.query('CREATE INDEX IF NOT EXISTS idx_org_subscriptions_status ON organization_subscriptions(status);')
     await pool.query('CREATE INDEX IF NOT EXISTS idx_organizations_stripe_customer ON organizations(stripe_customer_id);')
-    
+
+    // PayFast: subscription_token stored on the subscription row
+    await pool.query('ALTER TABLE organization_subscriptions ADD COLUMN IF NOT EXISTS subscription_token VARCHAR(255);')
+
+    // Per-org donation payment gateway credentials (PayFast merchant details)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS organization_payment_profiles (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        provider VARCHAR(50) NOT NULL DEFAULT 'payfast',
+        mode VARCHAR(20) NOT NULL DEFAULT 'sandbox',
+        merchant_id VARCHAR(255) NOT NULL,
+        merchant_key VARCHAR(255) NOT NULL,
+        passphrase VARCHAR(255),
+        donations_enabled BOOLEAN DEFAULT false,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (organization_id, provider)
+      );
+    `)
+
+    // Webhook event log for idempotency (prevents duplicate processing)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS webhook_events (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID REFERENCES organizations(id) ON DELETE SET NULL,
+        provider VARCHAR(50) NOT NULL,
+        event_type VARCHAR(100),
+        provider_reference VARCHAR(255),
+        payload_json JSONB,
+        processed BOOLEAN DEFAULT false,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (provider, provider_reference)
+      );
+    `)
+
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_webhook_events_provider ON webhook_events(provider, provider_reference);')
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_payment_profiles_org ON organization_payment_profiles(organization_id);')
+
     console.log('✅ Database schema initialized successfully')
   } catch (error: any) {
     console.error('❌ ERROR: Database initialization failed!')

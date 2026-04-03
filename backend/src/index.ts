@@ -15,8 +15,7 @@ import integrationRoutes from './routes/integrations'
 import organizationRoutes from './routes/organizations'
 import pledgeRoutes from './routes/pledges'
 import billingRoutes from './routes/billing'
-import { handleStripeWebhook } from './controllers/billing'
-import { syncService } from './services/syncService'
+import paymentProfileRoutes from './routes/paymentProfiles'
 
 dotenv.config()
 
@@ -39,9 +38,7 @@ app.use(cors({
   credentials: true
 }))
 
-// Stripe webhook requires the raw body for signature verification.
-app.post('/billing/webhook', express.raw({ type: 'application/json' }), handleStripeWebhook)
-
+// Billing ITN endpoints are handled inside billingRoutes (no raw body needed for PayFast)
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 
@@ -66,6 +63,7 @@ app.use('/integrations', integrationRoutes)
 app.use('/organizations', organizationRoutes)
 app.use('/pledges', pledgeRoutes)
 app.use('/billing', billingRoutes)
+app.use('/payment-profiles', paymentProfileRoutes)
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

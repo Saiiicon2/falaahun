@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { integrationService } from '../services/api'
-import { Settings, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react'
+import { integrationService, paymentProfileService } from '../services/api'
+import { Settings, CheckCircle, AlertCircle, RefreshCw, CreditCard } from 'lucide-react'
 
 function IntegrationSettings() {
   const [integrations, setIntegrations] = useState<any[]>([])
@@ -9,9 +9,50 @@ function IntegrationSettings() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
+  // PayFast donation profile state
+  const [pfProfile, setPfProfile] = useState<any>(null)
+  const [pfForm, setPfForm] = useState({ merchant_id: '', merchant_key: '', passphrase: '', mode: 'sandbox' as 'sandbox' | 'live', donations_enabled: false })
+  const [pfLoading, setPfLoading] = useState(false)
+  const [pfSaved, setPfSaved] = useState(false)
+
   useEffect(() => {
     fetchIntegrationStatus()
+    fetchPaymentProfile()
   }, [])
+
+  const fetchPaymentProfile = async () => {
+    try {
+      const res = await paymentProfileService.get()
+      const profile = res.data.data
+      setPfProfile(profile)
+      if (profile) {
+        setPfForm({
+          merchant_id: profile.merchant_id || '',
+          merchant_key: '',           // never returned from backend
+          passphrase: '',             // never returned from backend
+          mode: profile.mode || 'sandbox',
+          donations_enabled: profile.donations_enabled || false,
+        })
+      }
+    } catch { /* silent */ }
+  }
+
+  const savePaymentProfile = async () => {
+    if (!pfForm.merchant_id || !pfForm.merchant_key) {
+      return
+    }
+    try {
+      setPfLoading(true)
+      await paymentProfileService.save(pfForm)
+      setPfSaved(true)
+      await fetchPaymentProfile()
+      setTimeout(() => setPfSaved(false), 3000)
+    } catch (err: any) {
+      setError(err?.response?.data?.error || 'Failed to save payment profile')
+    } finally {
+      setPfLoading(false)
+    }
+  }
 
   const fetchIntegrationStatus = async () => {
     try {
@@ -209,6 +250,97 @@ function IntegrationSettings() {
             <button className="px-4 py-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg hover:bg-amber-100 text-sm font-medium">
               Sync Activity
             </button>
+          </div>
+        </div>
+
+        {/* PayFast Donation Gateway */}
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden mt-6">
+          <div className="bg-gradient-to-r from-blue-50 to-blue-100 px-6 py-4 border-b border-slate-200">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <CreditCard className="w-5 h-5 text-blue-700" />
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900">Donation Payment Gateway</h2>
+                  <p className="text-sm text-slate-600 mt-0.5">Connect your own PayFast merchant account to receive donations directly.</p>
+                </div>
+              </div>
+              <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                pfProfile?.donations_enabled ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-600'
+              }`}>
+                {pfProfile?.donations_enabled ? '✓ Enabled' : 'Not configured'}
+              </span>
+            </div>
+          </div>
+          <div className="p-6 space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-900 mb-1">Merchant ID</label>
+                <input
+                  type="text"
+                  value={pfForm.merchant_id}
+                  onChange={(e) => setPfForm({ ...pfForm, merchant_id: e.target.value })}
+                  placeholder="10000100"
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-400 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-900 mb-1">Merchant Key</label>
+                <input
+                  type="password"
+                  value={pfForm.merchant_key}
+                  onChange={(e) => setPfForm({ ...pfForm, merchant_key: e.target.value })}
+                  placeholder={pfProfile ? '(stored securely, enter to update)' : 'Your merchant key'}
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-400 text-sm"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-900 mb-1">Passphrase (optional)</label>
+                <input
+                  type="password"
+                  value={pfForm.passphrase}
+                  onChange={(e) => setPfForm({ ...pfForm, passphrase: e.target.value })}
+                  placeholder="Only if set in PayFast"
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-400 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-900 mb-1">Mode</label>
+                <select
+                  value={pfForm.mode}
+                  onChange={(e) => setPfForm({ ...pfForm, mode: e.target.value as 'sandbox' | 'live' })}
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-400 text-sm"
+                >
+                  <option value="sandbox">Sandbox (testing)</option>
+                  <option value="live">Live</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <input
+                id="donations_enabled"
+                type="checkbox"
+                checked={pfForm.donations_enabled}
+                onChange={(e) => setPfForm({ ...pfForm, donations_enabled: e.target.checked })}
+                className="w-4 h-4 rounded border-slate-300 text-emerald-600"
+              />
+              <label htmlFor="donations_enabled" className="text-sm text-slate-700">Enable donation payments for this organisation</label>
+            </div>
+            <div className="pt-2">
+              <button
+                onClick={savePaymentProfile}
+                disabled={pfLoading || !pfForm.merchant_id || !pfForm.merchant_key}
+                className="flex items-center gap-2 px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-sm font-medium"
+              >
+                {pfLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                {pfSaved ? 'Saved!' : 'Save Gateway Credentials'}
+              </button>
+            </div>
+            <p className="text-xs text-slate-500">
+              Credentials are stored encrypted per organisation and are never shared with other accounts.
+              Get your merchant ID &amp; key from your PayFast dashboard → Integration → Merchant Details.
+            </p>
           </div>
         </div>
 
