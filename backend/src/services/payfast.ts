@@ -17,8 +17,9 @@ export function generateSignature(
   params: Record<string, string>,
   passphrase?: string
 ): string {
+  // PayFast excludes both 'signature' and 'merchant_key' when computing the signature.
   const parts = Object.keys(params)
-    .filter((k) => k !== 'signature' && params[k] !== '')
+    .filter((k) => k !== 'signature' && k !== 'merchant_key' && params[k] !== '')
     .sort()
     .map((k) => `${k}=${encodeURIComponent(String(params[k])).replace(/%20/g, '+')}`)
     .join('&')
@@ -56,11 +57,14 @@ export function buildCheckoutParams(opts: {
     cancel_url:    opts.cancelUrl,
     notify_url:    opts.notifyUrl,
     name_first:    opts.nameFirst,
-    name_last:     opts.nameLast || ' ',
     email_address: opts.email,
     m_payment_id:  opts.mPaymentId,
     amount:        opts.amount,
     item_name:     opts.itemName,
+  }
+
+  if (opts.nameLast && opts.nameLast.trim()) {
+    params.name_last = opts.nameLast.trim()
   }
 
   if (opts.isRecurring) {
