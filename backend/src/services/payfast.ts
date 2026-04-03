@@ -17,15 +17,16 @@ export function generateSignature(
   params: Record<string, string>,
   passphrase?: string
 ): string {
-  // PayFast excludes both 'signature' and 'merchant_key' when computing the signature.
+  // PayFast includes ALL non-empty fields (including merchant_key), excludes only 'signature'.
+  // Values are trimmed and then URL-encoded (spaces → +), sorted alphabetically.
   const parts = Object.keys(params)
-    .filter((k) => k !== 'signature' && k !== 'merchant_key' && params[k] !== '')
+    .filter((k) => k !== 'signature' && params[k].trim() !== '')
     .sort()
-    .map((k) => `${k}=${encodeURIComponent(String(params[k])).replace(/%20/g, '+')}`)
+    .map((k) => `${k}=${encodeURIComponent(params[k].trim()).replace(/%20/g, '+')}`)
     .join('&')
 
   const str = passphrase
-    ? `${parts}&passphrase=${encodeURIComponent(passphrase).replace(/%20/g, '+')}`
+    ? `${parts}&passphrase=${encodeURIComponent(passphrase.trim()).replace(/%20/g, '+')}`
     : parts
 
   return crypto.createHash('md5').update(str).digest('hex')
