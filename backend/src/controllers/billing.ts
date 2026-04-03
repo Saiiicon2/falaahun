@@ -235,6 +235,41 @@ export const createPayfastCheckout = async (req: Request, res: Response) => {
 }
 
 // ---------------------------------------------------------------------------
+// POST /billing/dev-subscribe  (sandbox-only: instantly activate a plan)
+// ---------------------------------------------------------------------------
+
+export const devSubscribe = async (req: Request, res: Response) => {
+  if (!isSandbox()) {
+    return res.status(403).json({ success: false, error: 'Only available in sandbox mode' })
+  }
+  try {
+    const organizationId = req.user?.organizationId
+    const { planKey } = req.body
+    if (!organizationId) return res.status(400).json({ success: false, error: 'No org context' })
+    if (!PLANS[planKey as string]) return res.status(400).json({ success: false, error: `Unknown plan: ${planKey}` })
+
+    const subscriptionId = `dev_${organizationId}_${planKey}`
+    await pool.query(
+      `INSERT INTO organization_subscriptions
+         (id, organization_id, provider, provider_subscription_id,
+          plan_key, status, metadata, created_at, updated_at)
+       VALUES
+         (gen_random_uuid(), $1, 'payfast', $2, $3, 'active', '{}',
+          CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+       ON CONFLICT (provider_subscription_id) DO UPDATE SET
+         status     = 'active',
+         plan_key   = EXCLUDED.plan_key,
+         updated_at = CURRENT_TIMESTAMP`,
+      [organizationId, subscriptionId, planKey]
+    )
+    console.log(`[DevSubscribe] ✅ Sandbox subscription activated: org=${organizationId} plan=${planKey}`)
+    res.json({ success: true, data: { planKey, status: 'active' } })
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message })
+  }
+}
+
+// ---------------------------------------------------------------------------
 // POST /billing/payfast/itn  (PayFast sends this, not the browser)
 // Must respond 200 immediately; verification+processing is async.
 // ---------------------------------------------------------------------------

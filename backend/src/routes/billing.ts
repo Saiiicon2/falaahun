@@ -5,6 +5,7 @@ import {
   createPayfastCheckout,
   handlePayfastItn,
   handlePayfastCancelItn,
+  devSubscribe,
 } from '../controllers/billing'
 
 const router = Router()
@@ -17,5 +18,6 @@ router.post('/payfast/cancel-itn', handlePayfastCancelItn)
 router.use(authMiddleware)
 router.get('/status', getBillingStatus)
 router.post('/payfast/checkout', createPayfastCheckout)
+router.post('/dev-subscribe', devSubscribe)
 
 export default router

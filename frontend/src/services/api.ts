@@ -231,6 +231,9 @@ export const billingService = {
 
   createPayfastCheckout: (planKey: string, successUrl?: string, cancelUrl?: string) =>
     api.post('/billing/payfast/checkout', { planKey, successUrl, cancelUrl }),
+
+  devSubscribe: (planKey: string) =>
+    api.post('/billing/dev-subscribe', { planKey }),
 }
 
 export const paymentProfileService = {

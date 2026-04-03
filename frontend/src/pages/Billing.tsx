@@ -103,6 +103,16 @@ function Billing() {
     try {
       setRedirecting(true)
       setError('')
+
+      // In sandbox mode, bypass PayFast and activate directly
+      if (isSandbox) {
+        await billingService.devSubscribe(planKey)
+        setSuccess(`Sandbox: "${planKey}" plan activated instantly. Refresh to see your subscription.`)
+        setRedirecting(false)
+        await loadStatus()
+        return
+      }
+
       const response = await billingService.createPayfastCheckout(
         planKey,
         `${window.location.origin}/billing?checkout=success`,
