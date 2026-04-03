@@ -23,23 +23,44 @@ const planOptions = [
     name: 'Starter',
     price: '$19/mo',
     envKey: 'VITE_STRIPE_PRICE_STARTER',
-    features: 'Basic CRM + contact timeline + reminders',
+    description: 'Everything you need to manage your contacts and donor relationships.',
+    features: [
+      'Full contacts management with filtering & labels',
+      'Activity & pledge timeline per contact',
+      'Call logging & team comments',
+      'Scheduled meetings & task reminders',
+      'Basic analytics dashboard',
+    ],
   },
   {
     key: 'pro',
     name: 'Pro',
     price: '$49/mo',
     envKey: 'VITE_STRIPE_PRICE_PRO',
-    features: 'Pipelines, reports, and advanced automation',
+    description: 'Fundraising pipelines, financial reports, and third-party integrations.',
+    features: [
+      'Everything in Starter',
+      'Fundraising project management',
+      'Pipeline stages & deal tracking',
+      'Financial reports & activity charts',
+      'HubSpot manual sync',
+    ],
   },
   {
     key: 'team',
     name: 'Team',
     price: '$99/mo',
     envKey: 'VITE_STRIPE_PRICE_TEAM',
-    features: 'Multi-user controls + premium support',
+    description: 'Collaborate across your organization with shared access and role controls.',
+    features: [
+      'Everything in Pro',
+      'Multiple team members per organization',
+      'Owner / Admin / Member roles',
+      'Activity attribution (who did what)',
+      'Priority support',
+    ],
   },
-] as const
+]
 
 function Billing() {
   const [loading, setLoading] = useState(true)
@@ -197,16 +218,24 @@ function Billing() {
 
         <div>
           <h2 className="text-lg font-semibold text-slate-900 mb-4">Choose a Plan</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {plans.map((plan) => (
               <div key={plan.key} className="bg-white border border-slate-200 rounded-xl p-6 flex flex-col">
-                <p className="text-sm uppercase tracking-wide text-slate-500">{plan.name}</p>
+                <p className="text-sm uppercase tracking-wide text-slate-500 font-medium">{plan.name}</p>
                 <p className="text-3xl font-bold text-slate-900 mt-2">{plan.price}</p>
-                <p className="text-sm text-slate-600 mt-3 flex-1">{plan.features}</p>
+                <p className="text-sm text-slate-500 mt-2">{plan.description}</p>
+                <ul className="mt-4 space-y-2 flex-1">
+                  {plan.features.map((f) => (
+                    <li key={f} className="flex items-start gap-2 text-sm text-slate-700">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
                 <button
                   onClick={() => startCheckout(plan.priceId)}
                   disabled={redirecting || !plan.priceId}
-                  className="mt-4 px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-60"
+                  className="mt-6 px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-60"
                 >
                   {plan.priceId ? 'Upgrade' : 'Missing Price ID'}
                 </button>
