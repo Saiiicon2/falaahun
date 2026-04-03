@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, TrendingUp, ChevronDown, ChevronUp } from 'lucide-react'
+import { Plus, Trash2, TrendingUp, ChevronDown, ChevronUp, X } from 'lucide-react'
 import { projectService, contactService, pledgeService } from '../services/api'
 
 interface Project {
@@ -63,15 +63,12 @@ function Projects() {
     occurrence: 'one-time'
   })
   
-  const [pipelineStages, _setPipelineStages] = useState<PipelineStage[]>([
-    { id: '1', name: 'Planning', target_amount: 0, position: 1 },
-    { id: '2', name: 'In Progress', target_amount: 0, position: 2 },
-    { id: '3', name: 'Review', target_amount: 0, position: 3 },
-    { id: '4', name: 'Completed', target_amount: 0, position: 4 }
-  ])
-  
-  const [_deals, _setDeals] = useState<Deal[]>([])
-  const [_pledges, _setPledges] = useState<any[]>([])
+  const [projectStages, setProjectStages] = useState<Record<string, PipelineStage[]>>({})
+  const [projectDeals, setProjectDeals] = useState<Record<string, Deal[]>>({})
+  const [showStageForm, setShowStageForm] = useState<string | null>(null)
+  const [stageFormData, setStageFormData] = useState({ name: '', target_amount: '' })
+  const [showDealForm, setShowDealForm] = useState<{ projectId: string; stageId: string } | null>(null)
+  const [dealFormData, setDealFormData] = useState({ title: '', amount: '', contact_id: '' })
   const [projectContacts, setProjectContacts] = useState<ProjectContacts>({})
   const [projectPledgeStats, setProjectPledgeStats] = useState<Record<string, PledgeStats>>({})
 
@@ -133,6 +130,76 @@ function Projects() {
     }
   }
 
+  const fetchProjectStages = async (projectId: string) => {
+    try {
+      const response = await projectService.getStages(projectId)
+      const stages = response.data.data || []
+      setProjectStages(prev => ({ ...prev, [projectId]: stages }))
+    } catch (error) {
+      console.error('Error fetching stages:', error)
+    }
+  }
+
+  const fetchProjectDeals = async (projectId: string) => {
+    try {
+      const response = await projectService.getDeals(projectId)
+      const deals = response.data.data || []
+      setProjectDeals(prev => ({ ...prev, [projectId]: deals }))
+    } catch (error) {
+      console.error('Error fetching deals:', error)
+    }
+  }
+
+  const handleAddStage = async (projectId: string) => {
+    if (!stageFormData.name.trim()) return
+    try {
+      await projectService.addStage(projectId, {
+        name: stageFormData.name,
+        target_amount: parseFloat(stageFormData.target_amount) || 0,
+      })
+      setStageFormData({ name: '', target_amount: '' })
+      setShowStageForm(null)
+      fetchProjectStages(projectId)
+    } catch (error) {
+      console.error('Error adding stage:', error)
+    }
+  }
+
+  const handleAddDeal = async () => {
+    if (!showDealForm || !dealFormData.title.trim()) return
+    try {
+      await projectService.createDeal(showDealForm.projectId, {
+        title: dealFormData.title,
+        amount: parseFloat(dealFormData.amount) || 0,
+        stage_id: showDealForm.stageId,
+        contact_id: dealFormData.contact_id || undefined,
+      })
+      setDealFormData({ title: '', amount: '', contact_id: '' })
+      setShowDealForm(null)
+      fetchProjectDeals(showDealForm.projectId)
+    } catch (error) {
+      console.error('Error adding deal:', error)
+    }
+  }
+
+  const handleMoveDeal = async (dealId: string, newStageId: string, projectId: string) => {
+    try {
+      await projectService.updateDeal(dealId, { stage_id: newStageId })
+      fetchProjectDeals(projectId)
+    } catch (error) {
+      console.error('Error moving deal:', error)
+    }
+  }
+
+  const handleDeleteDeal = async (dealId: string, projectId: string) => {
+    try {
+      await projectService.deleteDeal(dealId)
+      fetchProjectDeals(projectId)
+    } catch (error) {
+      console.error('Error deleting deal:', error)
+    }
+  }
+
   const handleAddProject = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
@@ -163,7 +230,13 @@ function Projects() {
 
   const handleProjectSelect = (project: Project) => {
     setSelectedProject(project)
-    setExpandedProject(expandedProject === project.id ? null : project.id)
+    const newExpanded = expandedProject === project.id ? null : project.id
+    setExpandedProject(newExpanded)
+    if (newExpanded) {
+      fetchProjectStages(project.id)
+      fetchProjectDeals(project.id)
+      fetchProjectContacts(project.id)
+    }
   }
 
   const getProgressPercentage = (raised: number, budget: number) => {
@@ -344,24 +417,168 @@ function Projects() {
                       </div>
                     </div>
 
-                    {/* Pipeline Stages */}
-                    <div className="bg-white rounded-lg p-4 border border-slate-200">
-                      <h4 className="font-semibold text-slate-900 mb-4">Pipeline Stages</h4>
-                      <div className="space-y-2">
-                        {pipelineStages.map((stage, idx) => (
-                          <div key={stage.id} className="flex items-center gap-3">
-                            <div className="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">
-                              {idx + 1}
-                            </div>
-                            <div className="flex-1">
-                              <p className="text-sm font-medium text-slate-900">{stage.name}</p>
-                              {stage.target_amount ? (
-                                <p className="text-xs text-slate-500">Target: ${stage.target_amount.toLocaleString()}</p>
-                              ) : null}
-                            </div>
-                          </div>
-                        ))}
+                    {/* Pipeline Kanban Board */}
+                    <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+                      <div className="flex items-center justify-between p-4 border-b border-slate-200">
+                        <h4 className="font-semibold text-slate-900">Pipeline & Deals</h4>
+                        <button
+                          onClick={() => setShowStageForm(showStageForm === project.id ? null : project.id)}
+                          className="flex items-center gap-1 text-sm text-emerald-600 hover:text-emerald-800 font-medium"
+                        >
+                          <Plus className="w-4 h-4" />
+                          Add Stage
+                        </button>
                       </div>
+
+                      {showStageForm === project.id && (
+                        <div className="p-4 bg-emerald-50 border-b border-slate-200">
+                          <div className="flex gap-3 items-end">
+                            <div className="flex-1">
+                              <label className="block text-xs font-medium text-slate-700 mb-1">Stage Name</label>
+                              <input
+                                type="text"
+                                placeholder="e.g., Initial Contact"
+                                value={stageFormData.name}
+                                onChange={(e) => setStageFormData({ ...stageFormData, name: e.target.value })}
+                                className="w-full border border-slate-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-400"
+                              />
+                            </div>
+                            <div className="w-40">
+                              <label className="block text-xs font-medium text-slate-700 mb-1">Target Amount</label>
+                              <input
+                                type="number"
+                                placeholder="Optional"
+                                value={stageFormData.target_amount}
+                                onChange={(e) => setStageFormData({ ...stageFormData, target_amount: e.target.value })}
+                                className="w-full border border-slate-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-400"
+                              />
+                            </div>
+                            <button
+                              onClick={() => handleAddStage(project.id)}
+                              className="px-4 py-1.5 bg-emerald-600 text-white rounded text-sm font-medium hover:bg-emerald-700"
+                            >
+                              Add
+                            </button>
+                            <button
+                              onClick={() => setShowStageForm(null)}
+                              className="px-3 py-1.5 border border-slate-300 text-slate-600 rounded text-sm hover:bg-slate-50"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {!projectStages[project.id] || projectStages[project.id].length === 0 ? (
+                        <div className="p-8 text-center text-sm text-slate-500">
+                          No stages yet. Add your first pipeline stage above.
+                        </div>
+                      ) : (
+                        <div className="p-4 overflow-x-auto">
+                          <div className="flex gap-4" style={{ minWidth: 'max-content' }}>
+                            {[...(projectStages[project.id] || [])].sort((a, b) => a.position - b.position).map((stage) => {
+                              const stageDeals = (projectDeals[project.id] || []).filter(d => d.stage_id === stage.id)
+                              return (
+                                <div key={stage.id} className="w-60 flex-shrink-0">
+                                  <div className="bg-slate-100 rounded-lg p-3">
+                                    <div className="flex items-center justify-between mb-3">
+                                      <div>
+                                        <p className="text-sm font-semibold text-slate-800">{stage.name}</p>
+                                        {stage.target_amount ? (
+                                          <p className="text-xs text-slate-500">Target: ${Number(stage.target_amount).toLocaleString()}</p>
+                                        ) : null}
+                                      </div>
+                                      <span className="text-xs bg-white text-slate-600 px-2 py-0.5 rounded-full font-medium border border-slate-200">
+                                        {stageDeals.length}
+                                      </span>
+                                    </div>
+
+                                    <div className="space-y-2 min-h-[40px]">
+                                      {stageDeals.map((deal) => (
+                                        <div key={deal.id} className="bg-white rounded-lg p-3 border border-slate-200 shadow-sm">
+                                          <div className="flex items-start justify-between gap-1">
+                                            <p className="text-sm font-medium text-slate-900 leading-tight">{deal.title}</p>
+                                            <button
+                                              onClick={() => handleDeleteDeal(deal.id, project.id)}
+                                              className="text-slate-400 hover:text-red-500 flex-shrink-0"
+                                            >
+                                              <X className="w-3.5 h-3.5" />
+                                            </button>
+                                          </div>
+                                          <p className="text-sm font-semibold text-emerald-700 mt-1">${Number(deal.amount).toLocaleString()}</p>
+                                          <select
+                                            value={deal.stage_id}
+                                            onChange={(e) => handleMoveDeal(deal.id, e.target.value, project.id)}
+                                            className="mt-2 w-full text-xs border border-slate-200 rounded px-1.5 py-1 text-slate-600 bg-slate-50 focus:outline-none focus:border-emerald-400"
+                                          >
+                                            {(projectStages[project.id] || []).map(s => (
+                                              <option key={s.id} value={s.id}>{s.name}</option>
+                                            ))}
+                                          </select>
+                                        </div>
+                                      ))}
+                                    </div>
+
+                                    {showDealForm?.stageId === stage.id && showDealForm?.projectId === project.id ? (
+                                      <div className="mt-2 bg-white rounded-lg p-3 border border-emerald-300">
+                                        <input
+                                          type="text"
+                                          placeholder="Deal title"
+                                          value={dealFormData.title}
+                                          onChange={(e) => setDealFormData({ ...dealFormData, title: e.target.value })}
+                                          className="w-full border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-emerald-400 mb-2"
+                                        />
+                                        <input
+                                          type="number"
+                                          placeholder="Amount ($)"
+                                          value={dealFormData.amount}
+                                          onChange={(e) => setDealFormData({ ...dealFormData, amount: e.target.value })}
+                                          className="w-full border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-emerald-400 mb-2"
+                                        />
+                                        <select
+                                          value={dealFormData.contact_id}
+                                          onChange={(e) => setDealFormData({ ...dealFormData, contact_id: e.target.value })}
+                                          className="w-full border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-emerald-400 mb-2"
+                                        >
+                                          <option value="">No contact linked</option>
+                                          {(projectContacts[project.id] || []).map(c => (
+                                            <option key={c.id} value={c.id}>{c.first_name} {c.last_name}</option>
+                                          ))}
+                                        </select>
+                                        <div className="flex gap-2">
+                                          <button
+                                            onClick={handleAddDeal}
+                                            className="flex-1 px-2 py-1.5 bg-emerald-600 text-white rounded text-xs font-medium hover:bg-emerald-700"
+                                          >
+                                            Add Deal
+                                          </button>
+                                          <button
+                                            onClick={() => setShowDealForm(null)}
+                                            className="px-2 py-1.5 border border-slate-300 text-slate-600 rounded text-xs hover:bg-slate-50"
+                                          >
+                                            Cancel
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <button
+                                        onClick={() => {
+                                          setDealFormData({ title: '', amount: '', contact_id: '' })
+                                          setShowDealForm({ projectId: project.id, stageId: stage.id })
+                                        }}
+                                        className="mt-2 w-full flex items-center gap-1 text-xs text-slate-500 hover:text-emerald-600 py-1.5 rounded hover:bg-white transition"
+                                      >
+                                        <Plus className="w-3.5 h-3.5" />
+                                        Add deal
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Linked Contacts */}
