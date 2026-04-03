@@ -8,8 +8,9 @@ import {
   PAYFAST_LIVE_URL,
 } from '../services/payfast'
 
-const isSandbox = () =>
-  process.env.PAYFAST_SANDBOX === 'true' || process.env.NODE_ENV !== 'production'
+// Default to sandbox unless PAYFAST_SANDBOX is explicitly set to 'false'.
+// This prevents accidental live transactions when env vars are missing.
+const isSandbox = () => process.env.PAYFAST_SANDBOX !== 'false'
 
 const PLANS: Record<string, { label: string; amount: string }> = {
   starter: {
