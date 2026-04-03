@@ -9,24 +9,39 @@ const PAYFAST_VALIDATE_SANDBOX = 'https://sandbox.payfast.co.za/eng/query/valida
 const PAYFAST_VALIDATE_LIVE = 'https://www.payfast.co.za/eng/query/validate'
 
 /**
+ * Replicate PHP's urlencode() exactly.
+ * Differences from encodeURIComponent:
+ *   - Spaces → '+' (not %20)
+ *   - ! ~ ' ( ) are encoded (encodeURIComponent leaves them raw)
+ *   - * is NOT encoded (PHP leaves it raw, encodeURIComponent does too — no change needed)
+ */
+function phpUrlencode(str: string): string {
+  return encodeURIComponent(str)
+    .replace(/!/g, '%21')
+    .replace(/'/g, '%27')
+    .replace(/\(/g, '%28')
+    .replace(/\)/g, '%29')
+    .replace(/~/g, '%7E')
+    .replace(/%20/g, '+')
+}
+
+/**
  * Generate a PayFast signature.
- * Parameters are sorted alphabetically, URL-encoded, joined as a query string.
- * If a passphrase is configured it is appended before hashing.
+ * Must match PHP's reference implementation exactly:
+ *   sort keys alphabetically, phpUrlencode each value, join with &, MD5.
  */
 export function generateSignature(
   params: Record<string, string>,
   passphrase?: string
 ): string {
-  // PayFast includes ALL non-empty fields (including merchant_key), excludes only 'signature'.
-  // Values are trimmed and then URL-encoded (spaces → +), sorted alphabetically.
   const parts = Object.keys(params)
     .filter((k) => k !== 'signature' && params[k].trim() !== '')
     .sort()
-    .map((k) => `${k}=${encodeURIComponent(params[k].trim()).replace(/%20/g, '+')}`)
+    .map((k) => `${k}=${phpUrlencode(params[k].trim())}`)
     .join('&')
 
   const str = passphrase
-    ? `${parts}&passphrase=${encodeURIComponent(passphrase.trim()).replace(/%20/g, '+')}`
+    ? `${parts}&passphrase=${phpUrlencode(passphrase.trim())}`
     : parts
 
   return crypto.createHash('md5').update(str).digest('hex')
