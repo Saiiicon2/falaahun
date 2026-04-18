@@ -307,6 +307,41 @@ CREATE TABLE IF NOT EXISTS organization_subscriptions (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Subscription token for PayFast recurring billing
+ALTER TABLE organization_subscriptions ADD COLUMN IF NOT EXISTS subscription_token VARCHAR(255);
+
+-- Per-org donation payment gateway credentials (PayFast merchant details)
+CREATE TABLE IF NOT EXISTS organization_payment_profiles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  provider VARCHAR(50) NOT NULL DEFAULT 'payfast',
+  mode VARCHAR(20) NOT NULL DEFAULT 'sandbox',
+  merchant_id VARCHAR(255) NOT NULL,
+  merchant_key VARCHAR(255) NOT NULL,
+  passphrase VARCHAR(255),
+  donations_enabled BOOLEAN DEFAULT false,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (organization_id, provider)
+);
+
+-- Webhook event log for idempotency (prevents duplicate processing)
+CREATE TABLE IF NOT EXISTS webhook_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID REFERENCES organizations(id) ON DELETE SET NULL,
+  provider VARCHAR(50) NOT NULL,
+  event_type VARCHAR(100),
+  provider_reference VARCHAR(255),
+  payload_json JSONB,
+  processed BOOLEAN DEFAULT false,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (provider, provider_reference)
+);
+
+-- HubSpot sync error tracking
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS hubspot_sync_error TEXT;
+ALTER TABLE pledges ADD COLUMN IF NOT EXISTS hubspot_sync_error TEXT;
+
 CREATE INDEX IF NOT EXISTS idx_contacts_tenant_organization ON contacts(tenant_organization_id);
 CREATE INDEX IF NOT EXISTS idx_projects_tenant_organization ON projects(tenant_organization_id);
 CREATE INDEX IF NOT EXISTS idx_pipeline_stages_tenant_organization ON pipeline_stages(tenant_organization_id);
@@ -324,3 +359,5 @@ CREATE INDEX IF NOT EXISTS idx_org_memberships_user_org ON organization_membersh
 CREATE INDEX IF NOT EXISTS idx_pledges_deal ON pledges(deal_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_contact ON tasks(contact_id);
 CREATE INDEX IF NOT EXISTS idx_activities_created_by ON activities(created_by);
+CREATE INDEX IF NOT EXISTS idx_payment_profiles_org ON organization_payment_profiles(organization_id);
+CREATE INDEX IF NOT EXISTS idx_webhook_events_provider ON webhook_events(provider, provider_reference);
