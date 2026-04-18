@@ -1,7 +1,18 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search, Edit2, Trash2, X, ChevronDown } from 'lucide-react'
+import { Plus, Search, Edit2, Trash2, X, ChevronDown, Filter, MoreHorizontal } from 'lucide-react'
 import { contactService, projectService, organizationService } from '../services/api'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Card } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import { TableSkeleton } from '@/components/ui/loading-skeletons'
+import { EmptyState } from '@/components/ui/empty-state'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
+import { toast } from '@/hooks/use-toast'
 
 interface Organization {
   id: string
@@ -26,6 +37,13 @@ interface FilterState {
 const LEAD_STATUS_OPTIONS = ['lead', 'prospect', 'customer', 'past_customer']
 const LABEL_OPTIONS = ['VIP', 'Donor', 'Volunteer', 'Partner', 'Influencer', 'Active', 'Inactive']
 
+const statusConfig: Record<string, { variant: 'success' | 'info' | 'warning' | 'secondary'; label: string }> = {
+  customer: { variant: 'success', label: 'Customer' },
+  prospect: { variant: 'info', label: 'Prospect' },
+  past_customer: { variant: 'secondary', label: 'Past Customer' },
+  lead: { variant: 'warning', label: 'Lead' },
+}
+
 function Contacts() {
   const navigate = useNavigate()
   const [contacts, setContacts] = useState<any[]>([])
@@ -34,6 +52,7 @@ function Contacts() {
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
+  const [deleteId, setDeleteId] = useState<string | null>(null)
   
   const [filters, setFilters] = useState<FilterState>({
     leadStatus: [],
@@ -54,7 +73,6 @@ function Contacts() {
     project: ''
   })
 
-  // Count active filters
   const activeFilterCount = useMemo(() => {
     let count = 0
     if (filters.leadStatus.length > 0) count++
@@ -95,30 +113,15 @@ function Contacts() {
   const fetchContacts = async (filterState: FilterState = filters) => {
     try {
       let params: any = {}
-      
-      if (filterState.leadStatus.length > 0) {
-        params.leadStatus = filterState.leadStatus
-      }
-      if (filterState.labels.length > 0) {
-        params.labels = filterState.labels
-      }
-      if (filterState.projectId) {
-        params.projectId = filterState.projectId
-      }
-      if (filterState.dateRange.start) {
-        params.startDate = filterState.dateRange.start
-      }
-      if (filterState.dateRange.end) {
-        params.endDate = filterState.dateRange.end
-      }
-      if (filterState.search) {
-        params.search = filterState.search
-      }
+      if (filterState.leadStatus.length > 0) params.leadStatus = filterState.leadStatus
+      if (filterState.labels.length > 0) params.labels = filterState.labels
+      if (filterState.projectId) params.projectId = filterState.projectId
+      if (filterState.dateRange.start) params.startDate = filterState.dateRange.start
+      if (filterState.dateRange.end) params.endDate = filterState.dateRange.end
+      if (filterState.search) params.search = filterState.search
 
       const response = await contactService.getAll(params)
-      console.log('Fetched contacts response:', response.data)
       const contactsData = response.data.data?.contacts || response.data.data || []
-      console.log('Setting contacts:', contactsData)
       setContacts(contactsData)
     } catch (error) {
       console.error('Error fetching contacts:', error)
@@ -148,368 +151,305 @@ function Contacts() {
   }
 
   const clearAllFilters = () => {
-    const emptyFilters: FilterState = {
-      leadStatus: [],
-      labels: [],
-      projectId: '',
-      dateRange: { start: '', end: '' },
-      search: ''
-    }
-    handleFilterChange(emptyFilters)
+    handleFilterChange({ leadStatus: [], labels: [], projectId: '', dateRange: { start: '', end: '' }, search: '' })
   }
 
   const handleAddContact = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      console.log('Creating contact with data:', formData)
       const labels = formData.labels.split(',').map(l => l.trim()).filter(l => l)
-      const response = await contactService.create({
+      await contactService.create({
         ...formData,
         labels,
         leadStatus: formData.leadStatus,
         company: formData.company || undefined,
         project: formData.project || undefined
       })
-      console.log('Contact created successfully:', response.data)
       setFormData({ firstName: '', lastName: '', email: '', phone: '', labels: '', leadStatus: 'lead', company: '', project: '' })
       setShowForm(false)
+      toast({ title: 'Contact created', description: `${formData.firstName} ${formData.lastName} has been added.`, variant: 'success' })
       fetchContacts(filters)
     } catch (error: any) {
-      console.error('Error adding contact:', error)
-      console.error('Error response:', error.response?.data)
-      alert(`Failed to add contact: ${error.response?.data?.message || error.message}`)
+      toast({ title: 'Error', description: error.response?.data?.message || 'Failed to add contact', variant: 'destructive' })
     }
   }
 
-  const handleDeleteContact = async (id: string) => {
-    if (confirm('Are you sure you want to delete this contact?')) {
-      try {
-        await contactService.delete(id)
-        fetchContacts(filters)
-      } catch (error) {
-        console.error('Error deleting contact:', error)
-      }
+  const handleDeleteContact = async () => {
+    if (!deleteId) return
+    try {
+      await contactService.delete(deleteId)
+      setDeleteId(null)
+      toast({ title: 'Contact deleted', description: 'The contact has been removed.', variant: 'success' })
+      fetchContacts(filters)
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to delete contact', variant: 'destructive' })
     }
+  }
+
+  const getInitials = (first: string, last: string) => {
+    return `${(first || '')[0] || ''}${(last || '')[0] || ''}`.toUpperCase()
   }
 
   return (
-    <div className="p-8 bg-slate-50 min-h-screen">
-      <div className="flex justify-between items-center mb-8">
+    <div className="p-6 lg:p-8 min-h-screen">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Contacts</h1>
-          <p className="text-slate-500 mt-1">Manage all your contacts and relationships</p>
+          <h1 className="text-3xl font-bold text-foreground tracking-tight">Contacts</h1>
+          <p className="text-muted-foreground mt-1">Manage all your contacts and relationships</p>
         </div>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="bg-gradient-to-r from-emerald-500 to-emerald-600 text-white px-6 py-3 rounded-lg hover:from-emerald-600 hover:to-emerald-700 flex items-center gap-2 font-medium shadow-sm"
-        >
-          <Plus className="w-5 h-5" />
-          Add Contact
-        </button>
+        <Button onClick={() => setShowForm(true)} className="mt-4 sm:mt-0">
+          <Plus className="w-4 h-4 mr-1.5" /> Add Contact
+        </Button>
       </div>
 
-      {showForm && (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
-          <h2 className="text-lg font-semibold text-slate-900 mb-6">New Contact</h2>
+      {/* Add Contact Dialog */}
+      <Dialog open={showForm} onOpenChange={setShowForm}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Add New Contact</DialogTitle>
+            <DialogDescription>Fill in the details below to create a new contact.</DialogDescription>
+          </DialogHeader>
           <form onSubmit={handleAddContact}>
-            <div className="grid grid-cols-3 gap-4 mb-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">First Name</label>
-                <input
-                  type="text"
-                  placeholder="First Name"
-                  required
-                  value={formData.firstName}
-                  onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-200"
-                />
+            <div className="grid grid-cols-2 gap-4 py-4">
+              <div className="space-y-2">
+                <Label>First Name *</Label>
+                <Input required placeholder="First Name" value={formData.firstName} onChange={(e) => setFormData({ ...formData, firstName: e.target.value })} />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Last Name</label>
-                <input
-                  type="text"
-                  placeholder="Last Name"
-                  required
-                  value={formData.lastName}
-                  onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-200"
-                />
+              <div className="space-y-2">
+                <Label>Last Name *</Label>
+                <Input required placeholder="Last Name" value={formData.lastName} onChange={(e) => setFormData({ ...formData, lastName: e.target.value })} />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Lead Status</label>
-                <select
-                  value={formData.leadStatus}
-                  onChange={(e) => setFormData({ ...formData, leadStatus: e.target.value })}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-200"
-                >
+              <div className="space-y-2">
+                <Label>Email</Label>
+                <Input type="email" placeholder="email@example.com" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Phone</Label>
+                <Input type="tel" placeholder="+1 (555) 000-0000" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Lead Status</Label>
+                <select value={formData.leadStatus} onChange={(e) => setFormData({ ...formData, leadStatus: e.target.value })} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                   <option value="lead">Lead</option>
                   <option value="prospect">Prospect</option>
                   <option value="customer">Customer</option>
                   <option value="past_customer">Past Customer</option>
                 </select>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Organization</label>
-                <select
-                  value={formData.company}
-                  onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-200"
-                >
-                  <option value="">Select organization (optional)</option>
-                  {organizations.map((org) => (
-                    <option key={org.id} value={org.id}>
-                      {org.name}
-                    </option>
-                  ))}
+              <div className="space-y-2">
+                <Label>Organization</Label>
+                <select value={formData.company} onChange={(e) => setFormData({ ...formData, company: e.target.value })} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <option value="">Select organization</option>
+                  {organizations.map((org) => (<option key={org.id} value={org.id}>{org.name}</option>))}
                 </select>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Project</label>
-                <select
-                  value={formData.project}
-                  onChange={(e) => setFormData({ ...formData, project: e.target.value })}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-200"
-                >
-                  <option value="">Select project (optional)</option>
-                  {projects.map((proj) => (
-                    <option key={proj.id} value={proj.id}>
-                      {proj.name}
-                    </option>
-                  ))}
+              <div className="space-y-2">
+                <Label>Project</Label>
+                <select value={formData.project} onChange={(e) => setFormData({ ...formData, project: e.target.value })} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <option value="">Select project</option>
+                  {projects.map((proj) => (<option key={proj.id} value={proj.id}>{proj.name}</option>))}
                 </select>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-                <input
-                  type="email"
-                  placeholder="email@example.com"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-200"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Phone</label>
-                <input
-                  type="tel"
-                  placeholder="+1 (555) 000-0000"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-200"
-                />
+              <div className="space-y-2">
+                <Label>Labels</Label>
+                <Input placeholder="VIP, Donor (comma-separated)" value={formData.labels} onChange={(e) => setFormData({ ...formData, labels: e.target.value })} />
               </div>
             </div>
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-slate-700 mb-1">Labels</label>
-              <input
-                type="text"
-                placeholder="e.g., VIP, Donor, Volunteer (comma-separated)"
-                value={formData.labels}
-                onChange={(e) => setFormData({ ...formData, labels: e.target.value })}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-200"
-              />
-            </div>
-            <div className="flex gap-3">
-              <button type="submit" className="bg-gradient-to-r from-emerald-500 to-emerald-600 text-white px-6 py-2 rounded-lg hover:from-emerald-600 hover:to-emerald-700 font-medium">
-                Save Contact
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowForm(false)}
-                className="border border-slate-300 text-slate-700 px-6 py-2 rounded-lg hover:bg-slate-50 font-medium"
-              >
-                Cancel
-              </button>
-            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
+              <Button type="submit">Save Contact</Button>
+            </DialogFooter>
           </form>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 mb-6 p-4">
-        <div className="flex gap-3 mb-4">
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete Contact</DialogTitle>
+            <DialogDescription>Are you sure you want to delete this contact? This action cannot be undone.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteId(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDeleteContact}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Search & Filters */}
+      <Card className="mb-6 p-4">
+        <div className="flex gap-3 mb-0">
           <div className="flex-1 relative">
-            <Search className="absolute left-3 top-3 w-5 h-5 text-slate-400" />
-            <input
-              type="text"
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
               placeholder="Search contacts by name, email, or phone..."
               value={filters.search}
               onChange={(e) => handleFilterChange({ ...filters, search: e.target.value })}
-              onKeyPress={(e) => e.key === 'Enter' && handleFilterChange(filters)}
-              className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-200"
+              className="pl-9"
             />
           </div>
-          <button
+          <Button
+            variant={showFilters ? "default" : "outline"} 
             onClick={() => setShowFilters(!showFilters)}
-            className="bg-gradient-to-r from-slate-700 to-slate-800 text-white px-6 py-2 rounded-lg hover:from-slate-800 hover:to-slate-900 font-medium flex items-center gap-2"
           >
-            <ChevronDown className="w-4 h-4" />
-            Filters {activeFilterCount > 0 && <span className="bg-red-500 text-white px-2 py-0.5 rounded-full text-xs font-bold ml-1">{activeFilterCount}</span>}
-          </button>
+            <Filter className="w-4 h-4 mr-1.5" />
+            Filters
+            {activeFilterCount > 0 && (
+              <Badge variant="destructive" className="ml-2 h-5 w-5 p-0 flex items-center justify-center text-[10px]">
+                {activeFilterCount}
+              </Badge>
+            )}
+          </Button>
         </div>
 
-        {/* Filter Panel */}
         {showFilters && (
-          <div className="border-t border-slate-200 pt-4">
-            <div className="grid grid-cols-4 gap-6 mb-4">
-              {/* Lead Status Filter */}
+          <div className="border-t mt-4 pt-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-3 uppercase">Lead Status</label>
+                <label className="block text-xs font-semibold text-muted-foreground mb-3 uppercase tracking-wider">Lead Status</label>
                 <div className="space-y-2">
                   {LEAD_STATUS_OPTIONS.map(status => (
-                    <label key={status} className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={filters.leadStatus.includes(status)}
-                        onChange={() => handleToggleLeadStatus(status)}
-                        className="w-4 h-4 rounded border-slate-300 text-emerald-600 cursor-pointer"
-                      />
-                      <span className="text-sm text-slate-700 capitalize">{status}</span>
+                    <label key={status} className="flex items-center gap-2.5 cursor-pointer group">
+                      <input type="checkbox" checked={filters.leadStatus.includes(status)} onChange={() => handleToggleLeadStatus(status)} className="w-4 h-4 rounded border-input text-primary cursor-pointer focus:ring-ring" />
+                      <span className="text-sm text-foreground capitalize group-hover:text-primary transition-colors">{status.replace('_', ' ')}</span>
                     </label>
                   ))}
                 </div>
               </div>
-
-              {/* Labels Filter */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-3 uppercase">Labels</label>
+                <label className="block text-xs font-semibold text-muted-foreground mb-3 uppercase tracking-wider">Labels</label>
                 <div className="space-y-2">
                   {LABEL_OPTIONS.map(label => (
-                    <label key={label} className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={filters.labels.includes(label)}
-                        onChange={() => handleToggleLabel(label)}
-                        className="w-4 h-4 rounded border-slate-300 text-emerald-600 cursor-pointer"
-                      />
-                      <span className="text-sm text-slate-700">{label}</span>
+                    <label key={label} className="flex items-center gap-2.5 cursor-pointer group">
+                      <input type="checkbox" checked={filters.labels.includes(label)} onChange={() => handleToggleLabel(label)} className="w-4 h-4 rounded border-input text-primary cursor-pointer focus:ring-ring" />
+                      <span className="text-sm text-foreground group-hover:text-primary transition-colors">{label}</span>
                     </label>
                   ))}
                 </div>
               </div>
-
-              {/* Project Filter */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-3 uppercase">Project</label>
-                <select
-                  value={filters.projectId}
-                  onChange={(e) => handleFilterChange({ ...filters, projectId: e.target.value })}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-200"
-                >
+                <label className="block text-xs font-semibold text-muted-foreground mb-3 uppercase tracking-wider">Project</label>
+                <select value={filters.projectId} onChange={(e) => handleFilterChange({ ...filters, projectId: e.target.value })} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                   <option value="">All Projects</option>
-                  {projects.map(project => (
-                    <option key={project.id} value={project.id}>{project.name}</option>
-                  ))}
+                  {projects.map(project => (<option key={project.id} value={project.id}>{project.name}</option>))}
                 </select>
               </div>
-
-              {/* Date Range Filter */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-3 uppercase">Date Range</label>
+                <label className="block text-xs font-semibold text-muted-foreground mb-3 uppercase tracking-wider">Date Range</label>
                 <div className="space-y-2">
-                  <input
-                    type="date"
-                    value={filters.dateRange.start}
-                    onChange={(e) => handleFilterChange({ ...filters, dateRange: { ...filters.dateRange, start: e.target.value } })}
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-400"
-                    placeholder="Start date"
-                  />
-                  <input
-                    type="date"
-                    value={filters.dateRange.end}
-                    onChange={(e) => handleFilterChange({ ...filters, dateRange: { ...filters.dateRange, end: e.target.value } })}
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-400"
-                    placeholder="End date"
-                  />
+                  <Input type="date" value={filters.dateRange.start} onChange={(e) => handleFilterChange({ ...filters, dateRange: { ...filters.dateRange, start: e.target.value } })} />
+                  <Input type="date" value={filters.dateRange.end} onChange={(e) => handleFilterChange({ ...filters, dateRange: { ...filters.dateRange, end: e.target.value } })} />
                 </div>
               </div>
             </div>
-
             {activeFilterCount > 0 && (
-              <div className="border-t border-slate-200 pt-4">
-                <button
-                  onClick={clearAllFilters}
-                  className="text-sm text-red-600 hover:text-red-700 font-medium"
-                >
-                  Clear all filters
-                </button>
+              <div className="border-t pt-3">
+                <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={clearAllFilters}>
+                  <X className="w-3 h-3 mr-1" /> Clear all filters
+                </Button>
               </div>
             )}
           </div>
         )}
-      </div>
+      </Card>
 
+      {/* Contacts Table */}
       {loading ? (
-        <p className="text-slate-600 text-center py-12">Loading contacts...</p>
+        <TableSkeleton rows={8} cols={7} />
       ) : contacts.length > 0 ? (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">Name</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">Email</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">Organization</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">Project</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">Status</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">Phone</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">Labels</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {contacts.map((contact: any) => (
-                <tr
-                  key={contact.id}
-                  onClick={() => navigate(`/contacts/${contact.id}`)}
-                  className="hover:bg-slate-50 transition cursor-pointer"
-                >
-                  <td className="px-6 py-4 font-medium text-slate-900">{contact.first_name} {contact.last_name}</td>
-                  <td className="px-6 py-4 text-sm text-slate-600">{contact.email || '—'}</td>
-                  <td className="px-6 py-4 text-sm text-slate-600">{contact.organization_name || '—'}</td>
-                  <td className="px-6 py-4 text-sm text-slate-600">{contact.project_name || '—'}</td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
-                      contact.lead_status === 'customer' ? 'bg-green-100 text-green-700' :
-                      contact.lead_status === 'prospect' ? 'bg-blue-100 text-blue-700' :
-                      contact.lead_status === 'past_customer' ? 'bg-gray-100 text-gray-700' :
-                      'bg-amber-100 text-amber-700'
-                    }`}>
-                      {contact.lead_status || 'lead'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-slate-600">{contact.phone || '—'}</td>
-                  <td className="px-6 py-4">
-                    {contact.labels && contact.labels.length > 0 && (
-                      <div className="flex gap-2 flex-wrap">
-                        {contact.labels.map((label: string, idx: number) => (
-                          <span key={idx} className="px-2.5 py-1 text-xs font-medium bg-emerald-100 text-emerald-700 rounded-full">
-                            {label}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 flex gap-2">
-                    <button className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition">
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteContact(contact.id)}
-                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </td>
+        <Card className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b bg-muted/50">
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Contact</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Email</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Organization</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Phone</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden xl:table-cell">Labels</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider w-12"></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y">
+                {contacts.map((contact: any) => {
+                  const status = statusConfig[contact.lead_status] || statusConfig.lead
+                  return (
+                    <tr
+                      key={contact.id}
+                      onClick={() => navigate(`/contacts/${contact.id}`)}
+                      className="hover:bg-muted/50 transition-colors cursor-pointer group"
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-8 w-8">
+                            <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+                              {getInitials(contact.first_name, contact.last_name)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className="font-medium text-sm text-foreground group-hover:text-primary transition-colors">
+                            {contact.first_name} {contact.last_name}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground">{contact.email || '—'}</td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground hidden lg:table-cell">{contact.organization_name || '—'}</td>
+                      <td className="px-4 py-3">
+                        <Badge variant={status.variant}>{status.label}</Badge>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground hidden md:table-cell">{contact.phone || '—'}</td>
+                      <td className="px-4 py-3 hidden xl:table-cell">
+                        {contact.labels && contact.labels.length > 0 && (
+                          <div className="flex gap-1 flex-wrap">
+                            {contact.labels.slice(0, 2).map((label: string, idx: number) => (
+                              <Badge key={idx} variant="outline" className="text-[10px]">{label}</Badge>
+                            ))}
+                            {contact.labels.length > 2 && (
+                              <Badge variant="outline" className="text-[10px]">+{contact.labels.length - 2}</Badge>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => navigate(`/contacts/${contact.id}`)}>
+                              <Edit2 className="w-3.5 h-3.5 mr-2" /> View Details
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setDeleteId(contact.id)}>
+                              <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="border-t px-4 py-3 flex items-center justify-between bg-muted/30">
+            <p className="text-xs text-muted-foreground">{contacts.length} contact{contacts.length !== 1 ? 's' : ''}</p>
+          </div>
+        </Card>
       ) : (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-12 text-center">
-          <div className="text-5xl mb-4">👥</div>
-          <p className="text-slate-600 font-medium">No contacts yet</p>
-          <p className="text-slate-500 mt-1">Create your first contact to get started managing relationships</p>
-        </div>
+        <Card>
+          <EmptyState
+            icon="contacts"
+            title="No contacts found"
+            description={activeFilterCount > 0 ? "No contacts match your current filters. Try adjusting or clearing them." : "Create your first contact to start managing relationships."}
+            actionLabel={activeFilterCount > 0 ? "Clear Filters" : "Add Contact"}
+            onAction={activeFilterCount > 0 ? clearAllFilters : () => setShowForm(true)}
+          />
+        </Card>
       )}
     </div>
   )

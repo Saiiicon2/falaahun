@@ -1,6 +1,17 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, TrendingUp, ChevronDown, ChevronUp, X } from 'lucide-react'
+import { Plus, Trash2, TrendingUp, ChevronDown, ChevronUp, X, Layers, Users, DollarSign } from 'lucide-react'
 import { projectService, contactService, pledgeService } from '../services/api'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Progress } from '@/components/ui/progress'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { TableSkeleton } from '@/components/ui/loading-skeletons'
+import { EmptyState } from '@/components/ui/empty-state'
+import { useToast } from '@/hooks/use-toast'
 
 interface Project {
   id: string
@@ -50,9 +61,11 @@ interface PledgeStats {
 }
 
 function Projects() {
+  const { toast } = useToast()
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState<string | null>(null)
   const [expandedProject, setExpandedProject] = useState<string | null>(null)
   const [_selectedProject, setSelectedProject] = useState<Project | null>(null)
   
@@ -212,19 +225,22 @@ function Projects() {
       setFormData({ name: '', description: '', budget: '', occurrence: 'one-time' })
       setShowForm(false)
       fetchProjects()
+      toast({ title: 'Project created', variant: 'success' })
     } catch (error) {
       console.error('Error adding project:', error)
+      toast({ title: 'Failed to create project', variant: 'destructive' })
     }
   }
 
   const handleDeleteProject = async (id: string) => {
-    if (confirm('Are you sure you want to delete this project?')) {
-      try {
-        await projectService.delete(id)
-        fetchProjects()
-      } catch (error) {
-        console.error('Error deleting project:', error)
-      }
+    try {
+      await projectService.delete(id)
+      setShowDeleteDialog(null)
+      fetchProjects()
+      toast({ title: 'Project deleted', variant: 'success' })
+    } catch (error) {
+      console.error('Error deleting project:', error)
+      toast({ title: 'Failed to delete project', variant: 'destructive' })
     }
   }
 
@@ -245,413 +261,291 @@ function Projects() {
   }
 
   return (
-    <div className="p-8 bg-slate-50 min-h-screen">
-      <div className="flex justify-between items-center mb-8">
+    <div className="flex-1 p-6 bg-background min-h-screen">
+      <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Projects & Deals</h1>
-          <p className="text-slate-500 mt-1">Manage fundraising projects and pipeline stages</p>
+          <h1 className="text-2xl font-bold text-foreground">Projects & Deals</h1>
+          <p className="text-muted-foreground text-sm mt-1">Manage fundraising projects and pipeline stages</p>
         </div>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="bg-gradient-to-r from-emerald-500 to-emerald-600 text-white px-6 py-3 rounded-lg hover:from-emerald-600 hover:to-emerald-700 flex items-center gap-2 font-medium shadow-sm"
-        >
-          <Plus className="w-5 h-5" />
-          New Project
-        </button>
+        <Button onClick={() => setShowForm(true)} className="gap-2">
+          <Plus className="w-4 h-4" /> New Project
+        </Button>
       </div>
 
-      {showForm && (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 mb-8">
-          <h2 className="text-2xl font-bold text-slate-900 mb-6">Create New Project</h2>
-          <form onSubmit={handleAddProject}>
-            <div className="grid grid-cols-2 gap-6 mb-6">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Project Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g., Destination Dawah"
-                  required
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full border border-slate-200 rounded-lg px-4 py-2 focus:outline-none focus:border-emerald-400"
-                />
+      {/* New Project Dialog */}
+      <Dialog open={showForm} onOpenChange={setShowForm}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Create New Project</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleAddProject} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Project Name</Label>
+                <Input placeholder="e.g., Destination Dawah" required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Occurrence Type</label>
-                <select
-                  value={formData.occurrence}
-                  onChange={(e) => setFormData({ ...formData, occurrence: e.target.value })}
-                  className="w-full border border-slate-200 rounded-lg px-4 py-2 focus:outline-none focus:border-emerald-400"
-                >
+              <div className="space-y-2">
+                <Label>Occurrence Type</Label>
+                <select value={formData.occurrence} onChange={(e) => setFormData({ ...formData, occurrence: e.target.value })} className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm">
                   <option value="one-time">One Time Deal</option>
                   <option value="monthly">Monthly Recurring</option>
                 </select>
               </div>
             </div>
-            
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-slate-700 mb-2">Description</label>
-              <textarea
-                placeholder="Project description and goals"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="w-full border border-slate-200 rounded-lg px-4 py-2 focus:outline-none focus:border-emerald-400 h-24"
-              />
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Textarea placeholder="Project description and goals" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} rows={3} />
             </div>
-            
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-slate-700 mb-2">Target Budget</label>
-              <input
-                type="number"
-                placeholder="Total amount to raise"
-                value={formData.budget}
-                onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
-                className="w-full border border-slate-200 rounded-lg px-4 py-2 focus:outline-none focus:border-emerald-400"
-              />
+            <div className="space-y-2">
+              <Label>Target Budget</Label>
+              <Input type="number" placeholder="Total amount to raise" value={formData.budget} onChange={(e) => setFormData({ ...formData, budget: e.target.value })} />
             </div>
-            
-            <div className="flex gap-3">
-              <button
-                type="submit"
-                className="bg-gradient-to-r from-emerald-500 to-emerald-600 text-white px-6 py-2 rounded-lg hover:from-emerald-600 hover:to-emerald-700 font-medium"
-              >
-                Create Project
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowForm(false)}
-                className="border border-slate-300 text-slate-700 px-6 py-2 rounded-lg hover:bg-slate-50 font-medium"
-              >
-                Cancel
-              </button>
-            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
+              <Button type="submit">Create Project</Button>
+            </DialogFooter>
           </form>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <Dialog open={!!showDeleteDialog} onOpenChange={() => setShowDeleteDialog(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete Project</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">Are you sure? This will permanently delete this project and all its stages and deals.</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteDialog(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={() => showDeleteDialog && handleDeleteProject(showDeleteDialog)}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {loading ? (
-        <p className="text-slate-600 text-center py-12">Loading projects...</p>
+        <TableSkeleton />
       ) : projects.length > 0 ? (
         <div className="space-y-4">
           {projects.map((project) => {
             const progress = getProgressPercentage(project.raised || 0, project.budget)
             return (
-              <div key={project.id} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+              <Card key={project.id} className="overflow-hidden">
                 {/* Header */}
-                <div 
-                  onClick={() => handleProjectSelect(project)}
-                  className="p-6 cursor-pointer hover:bg-slate-50 transition"
-                >
+                <div onClick={() => handleProjectSelect(project)} className="p-6 cursor-pointer hover:bg-muted/30 transition">
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
                       <div className="flex items-center gap-3">
-                        <h3 className="text-xl font-bold text-slate-900">{project.name}</h3>
-                        <span className="px-3 py-1 bg-emerald-50 text-emerald-700 text-xs font-medium rounded-full">
+                        <h3 className="text-lg font-bold text-foreground">{project.name}</h3>
+                        <Badge variant={project.occurrence === 'monthly' ? 'info' : 'secondary'}>
                           {project.occurrence === 'monthly' ? 'Monthly Recurring' : 'One Time'}
-                        </span>
+                        </Badge>
                       </div>
-                      <p className="text-sm text-slate-600 mt-2">{project.description}</p>
+                      {project.description && <p className="text-sm text-muted-foreground mt-1.5">{project.description}</p>}
                     </div>
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleDeleteProject(project.id)
-                        }}
-                        className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 rounded"
-                      >
+                    <div className="flex items-center gap-2">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={(e) => { e.stopPropagation(); setShowDeleteDialog(project.id) }}>
                         <Trash2 className="w-4 h-4" />
-                      </button>
-                      {expandedProject === project.id ? (
-                        <ChevronUp className="w-5 h-5 text-slate-600" />
-                      ) : (
-                        <ChevronDown className="w-5 h-5 text-slate-600" />
-                      )}
+                      </Button>
+                      {expandedProject === project.id ? <ChevronUp className="w-5 h-5 text-muted-foreground" /> : <ChevronDown className="w-5 h-5 text-muted-foreground" />}
                     </div>
                   </div>
 
-                  {/* Progress Bar */}
                   <div className="mt-4">
                     <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm font-medium text-slate-700">Funding Progress</span>
+                      <span className="text-sm font-medium text-muted-foreground">Funding Progress</span>
                       <span className="text-sm font-semibold text-emerald-600">
                         ${(project.raised || 0).toLocaleString()} / ${(project.budget || 0).toLocaleString()}
                       </span>
                     </div>
-                    <div className="w-full bg-slate-200 rounded-full h-2">
-                      <div
-                        className="bg-gradient-to-r from-emerald-500 to-emerald-600 h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${progress}%` }}
-                      ></div>
-                    </div>
-                    <p className="text-xs text-slate-500 mt-1">{progress.toFixed(1)}% funded</p>
+                    <Progress value={progress} className="h-2" />
+                    <p className="text-xs text-muted-foreground mt-1">{progress.toFixed(1)}% funded</p>
                   </div>
                 </div>
 
                 {/* Expanded Details */}
                 {expandedProject === project.id && (
-                  <div className="border-t border-slate-200 bg-slate-50 p-6 space-y-6">
-                    {/* Stats Row */}
+                  <div className="border-t bg-muted/30 p-6 space-y-6">
+                    {/* Stats */}
                     <div className="grid grid-cols-3 gap-4">
-                      <div className="bg-white rounded-lg p-4 border border-slate-200">
-                        <p className="text-xs text-slate-600 font-medium">Status</p>
-                        <p className="text-sm font-bold text-slate-900 mt-2 capitalize">
-                          <span className={`px-2 py-1 rounded text-xs font-medium ${
-                            project.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-800'
-                          }`}>
-                            {project.status}
-                          </span>
-                        </p>
-                      </div>
-                      <div className="bg-white rounded-lg p-4 border border-slate-200">
-                        <p className="text-xs text-slate-600 font-medium">Remaining</p>
-                        <p className="text-sm font-bold text-slate-900 mt-2">
-                          ${((project.budget || 0) - (project.raised || 0)).toLocaleString()}
-                        </p>
-                      </div>
-                      <div className="bg-white rounded-lg p-4 border border-slate-200">
-                        <p className="text-xs text-slate-600 font-medium">Created</p>
-                        <p className="text-sm font-bold text-slate-900 mt-2">
-                          {new Date(project.created_at).toLocaleDateString()}
-                        </p>
-                      </div>
+                      <Card>
+                        <CardContent className="p-4">
+                          <p className="text-xs text-muted-foreground font-medium">Status</p>
+                          <Badge variant={project.status === 'active' ? 'success' : 'secondary'} className="mt-2 capitalize">{project.status}</Badge>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="p-4">
+                          <p className="text-xs text-muted-foreground font-medium">Remaining</p>
+                          <p className="text-lg font-bold text-foreground mt-1">${((project.budget || 0) - (project.raised || 0)).toLocaleString()}</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="p-4">
+                          <p className="text-xs text-muted-foreground font-medium">Created</p>
+                          <p className="text-sm font-semibold text-foreground mt-2">{new Date(project.created_at).toLocaleDateString()}</p>
+                        </CardContent>
+                      </Card>
                     </div>
 
-                    {/* Pipeline Kanban Board */}
-                    <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-                      <div className="flex items-center justify-between p-4 border-b border-slate-200">
-                        <h4 className="font-semibold text-slate-900">Pipeline & Deals</h4>
-                        <button
-                          onClick={() => setShowStageForm(showStageForm === project.id ? null : project.id)}
-                          className="flex items-center gap-1 text-sm text-emerald-600 hover:text-emerald-800 font-medium"
-                        >
-                          <Plus className="w-4 h-4" />
-                          Add Stage
-                        </button>
-                      </div>
-
-                      {showStageForm === project.id && (
-                        <div className="p-4 bg-emerald-50 border-b border-slate-200">
-                          <div className="flex gap-3 items-end">
-                            <div className="flex-1">
-                              <label className="block text-xs font-medium text-slate-700 mb-1">Stage Name</label>
-                              <input
-                                type="text"
-                                placeholder="e.g., Initial Contact"
-                                value={stageFormData.name}
-                                onChange={(e) => setStageFormData({ ...stageFormData, name: e.target.value })}
-                                className="w-full border border-slate-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-400"
-                              />
+                    {/* Pipeline Kanban */}
+                    <Card>
+                      <CardHeader className="pb-3 flex-row items-center justify-between">
+                        <CardTitle className="text-sm font-semibold">Pipeline & Deals</CardTitle>
+                        <Button variant="ghost" size="sm" onClick={() => setShowStageForm(showStageForm === project.id ? null : project.id)} className="gap-1 text-emerald-600 hover:text-emerald-700">
+                          <Plus className="w-3.5 h-3.5" /> Add Stage
+                        </Button>
+                      </CardHeader>
+                      <CardContent>
+                        {showStageForm === project.id && (
+                          <div className="p-4 bg-muted/50 rounded-lg border mb-4 flex gap-3 items-end">
+                            <div className="flex-1 space-y-1">
+                              <Label className="text-xs">Stage Name</Label>
+                              <Input placeholder="e.g., Initial Contact" value={stageFormData.name} onChange={(e) => setStageFormData({ ...stageFormData, name: e.target.value })} className="h-8 text-sm" />
                             </div>
-                            <div className="w-40">
-                              <label className="block text-xs font-medium text-slate-700 mb-1">Target Amount</label>
-                              <input
-                                type="number"
-                                placeholder="Optional"
-                                value={stageFormData.target_amount}
-                                onChange={(e) => setStageFormData({ ...stageFormData, target_amount: e.target.value })}
-                                className="w-full border border-slate-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-400"
-                              />
+                            <div className="w-36 space-y-1">
+                              <Label className="text-xs">Target Amount</Label>
+                              <Input type="number" placeholder="Optional" value={stageFormData.target_amount} onChange={(e) => setStageFormData({ ...stageFormData, target_amount: e.target.value })} className="h-8 text-sm" />
                             </div>
-                            <button
-                              onClick={() => handleAddStage(project.id)}
-                              className="px-4 py-1.5 bg-emerald-600 text-white rounded text-sm font-medium hover:bg-emerald-700"
-                            >
-                              Add
-                            </button>
-                            <button
-                              onClick={() => setShowStageForm(null)}
-                              className="px-3 py-1.5 border border-slate-300 text-slate-600 rounded text-sm hover:bg-slate-50"
-                            >
-                              Cancel
-                            </button>
+                            <Button size="sm" onClick={() => handleAddStage(project.id)} className="h-8">Add</Button>
+                            <Button size="sm" variant="outline" onClick={() => setShowStageForm(null)} className="h-8">Cancel</Button>
                           </div>
-                        </div>
-                      )}
+                        )}
 
-                      {!projectStages[project.id] || projectStages[project.id].length === 0 ? (
-                        <div className="p-8 text-center text-sm text-slate-500">
-                          No stages yet. Add your first pipeline stage above.
-                        </div>
-                      ) : (
-                        <div className="p-4 overflow-x-auto">
-                          <div className="flex gap-4" style={{ minWidth: 'max-content' }}>
-                            {[...(projectStages[project.id] || [])].sort((a, b) => a.position - b.position).map((stage) => {
-                              const stageDeals = (projectDeals[project.id] || []).filter(d => d.stage_id === stage.id)
-                              return (
-                                <div key={stage.id} className="w-60 flex-shrink-0">
-                                  <div className="bg-slate-100 rounded-lg p-3">
-                                    <div className="flex items-center justify-between mb-3">
-                                      <div>
-                                        <p className="text-sm font-semibold text-slate-800">{stage.name}</p>
-                                        {stage.target_amount ? (
-                                          <p className="text-xs text-slate-500">Target: ${Number(stage.target_amount).toLocaleString()}</p>
-                                        ) : null}
-                                      </div>
-                                      <span className="text-xs bg-white text-slate-600 px-2 py-0.5 rounded-full font-medium border border-slate-200">
-                                        {stageDeals.length}
-                                      </span>
-                                    </div>
-
-                                    <div className="space-y-2 min-h-[40px]">
-                                      {stageDeals.map((deal) => (
-                                        <div key={deal.id} className="bg-white rounded-lg p-3 border border-slate-200 shadow-sm">
-                                          <div className="flex items-start justify-between gap-1">
-                                            <p className="text-sm font-medium text-slate-900 leading-tight">{deal.title}</p>
-                                            <button
-                                              onClick={() => handleDeleteDeal(deal.id, project.id)}
-                                              className="text-slate-400 hover:text-red-500 flex-shrink-0"
-                                            >
-                                              <X className="w-3.5 h-3.5" />
-                                            </button>
-                                          </div>
-                                          <p className="text-sm font-semibold text-emerald-700 mt-1">${Number(deal.amount).toLocaleString()}</p>
-                                          <select
-                                            value={deal.stage_id}
-                                            onChange={(e) => handleMoveDeal(deal.id, e.target.value, project.id)}
-                                            className="mt-2 w-full text-xs border border-slate-200 rounded px-1.5 py-1 text-slate-600 bg-slate-50 focus:outline-none focus:border-emerald-400"
-                                          >
-                                            {(projectStages[project.id] || []).map(s => (
-                                              <option key={s.id} value={s.id}>{s.name}</option>
-                                            ))}
-                                          </select>
+                        {!projectStages[project.id] || projectStages[project.id].length === 0 ? (
+                          <EmptyState icon={Layers} title="No stages yet" description="Add your first pipeline stage above." />
+                        ) : (
+                          <div className="overflow-x-auto -mx-2">
+                            <div className="flex gap-3 px-2" style={{ minWidth: 'max-content' }}>
+                              {[...(projectStages[project.id] || [])].sort((a, b) => a.position - b.position).map((stage) => {
+                                const stageDeals = (projectDeals[project.id] || []).filter(d => d.stage_id === stage.id)
+                                return (
+                                  <div key={stage.id} className="w-56 flex-shrink-0">
+                                    <div className="bg-muted/50 rounded-lg p-3 border">
+                                      <div className="flex items-center justify-between mb-3">
+                                        <div>
+                                          <p className="text-sm font-semibold text-foreground">{stage.name}</p>
+                                          {stage.target_amount ? <p className="text-xs text-muted-foreground">Target: ${Number(stage.target_amount).toLocaleString()}</p> : null}
                                         </div>
-                                      ))}
-                                    </div>
-
-                                    {showDealForm?.stageId === stage.id && showDealForm?.projectId === project.id ? (
-                                      <div className="mt-2 bg-white rounded-lg p-3 border border-emerald-300">
-                                        <input
-                                          type="text"
-                                          placeholder="Deal title"
-                                          value={dealFormData.title}
-                                          onChange={(e) => setDealFormData({ ...dealFormData, title: e.target.value })}
-                                          className="w-full border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-emerald-400 mb-2"
-                                        />
-                                        <input
-                                          type="number"
-                                          placeholder="Amount ($)"
-                                          value={dealFormData.amount}
-                                          onChange={(e) => setDealFormData({ ...dealFormData, amount: e.target.value })}
-                                          className="w-full border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-emerald-400 mb-2"
-                                        />
-                                        <select
-                                          value={dealFormData.contact_id}
-                                          onChange={(e) => setDealFormData({ ...dealFormData, contact_id: e.target.value })}
-                                          className="w-full border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-emerald-400 mb-2"
-                                        >
-                                          <option value="">No contact linked</option>
-                                          {(projectContacts[project.id] || []).map(c => (
-                                            <option key={c.id} value={c.id}>{c.first_name} {c.last_name}</option>
-                                          ))}
-                                        </select>
-                                        <div className="flex gap-2">
-                                          <button
-                                            onClick={handleAddDeal}
-                                            className="flex-1 px-2 py-1.5 bg-emerald-600 text-white rounded text-xs font-medium hover:bg-emerald-700"
-                                          >
-                                            Add Deal
-                                          </button>
-                                          <button
-                                            onClick={() => setShowDealForm(null)}
-                                            className="px-2 py-1.5 border border-slate-300 text-slate-600 rounded text-xs hover:bg-slate-50"
-                                          >
-                                            Cancel
-                                          </button>
-                                        </div>
+                                        <Badge variant="outline" className="text-xs">{stageDeals.length}</Badge>
                                       </div>
-                                    ) : (
-                                      <button
-                                        onClick={() => {
-                                          setDealFormData({ title: '', amount: '', contact_id: '' })
-                                          setShowDealForm({ projectId: project.id, stageId: stage.id })
-                                        }}
-                                        className="mt-2 w-full flex items-center gap-1 text-xs text-slate-500 hover:text-emerald-600 py-1.5 rounded hover:bg-white transition"
-                                      >
-                                        <Plus className="w-3.5 h-3.5" />
-                                        Add deal
-                                      </button>
-                                    )}
+
+                                      <div className="space-y-2 min-h-[40px]">
+                                        {stageDeals.map((deal) => (
+                                          <Card key={deal.id} className="shadow-sm">
+                                            <CardContent className="p-3">
+                                              <div className="flex items-start justify-between gap-1">
+                                                <p className="text-sm font-medium text-foreground leading-tight">{deal.title}</p>
+                                                <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-destructive" onClick={() => handleDeleteDeal(deal.id, project.id)}>
+                                                  <X className="w-3 h-3" />
+                                                </Button>
+                                              </div>
+                                              <p className="text-sm font-semibold text-emerald-600 mt-1">${Number(deal.amount).toLocaleString()}</p>
+                                              <select value={deal.stage_id} onChange={(e) => handleMoveDeal(deal.id, e.target.value, project.id)} className="mt-2 w-full text-xs border border-input rounded px-1.5 py-1 text-muted-foreground bg-background">
+                                                {(projectStages[project.id] || []).map(s => (
+                                                  <option key={s.id} value={s.id}>{s.name}</option>
+                                                ))}
+                                              </select>
+                                            </CardContent>
+                                          </Card>
+                                        ))}
+                                      </div>
+
+                                      {showDealForm?.stageId === stage.id && showDealForm?.projectId === project.id ? (
+                                        <Card className="mt-2 border-emerald-200">
+                                          <CardContent className="p-3 space-y-2">
+                                            <Input placeholder="Deal title" value={dealFormData.title} onChange={(e) => setDealFormData({ ...dealFormData, title: e.target.value })} className="h-8 text-sm" />
+                                            <Input type="number" placeholder="Amount ($)" value={dealFormData.amount} onChange={(e) => setDealFormData({ ...dealFormData, amount: e.target.value })} className="h-8 text-sm" />
+                                            <select value={dealFormData.contact_id} onChange={(e) => setDealFormData({ ...dealFormData, contact_id: e.target.value })} className="w-full border border-input rounded px-2 py-1.5 text-sm bg-background">
+                                              <option value="">No contact linked</option>
+                                              {(projectContacts[project.id] || []).map(c => (
+                                                <option key={c.id} value={c.id}>{c.first_name} {c.last_name}</option>
+                                              ))}
+                                            </select>
+                                            <div className="flex gap-2">
+                                              <Button size="sm" onClick={handleAddDeal} className="flex-1 h-7 text-xs">Add Deal</Button>
+                                              <Button size="sm" variant="outline" onClick={() => setShowDealForm(null)} className="h-7 text-xs">Cancel</Button>
+                                            </div>
+                                          </CardContent>
+                                        </Card>
+                                      ) : (
+                                        <Button variant="ghost" size="sm" onClick={() => { setDealFormData({ title: '', amount: '', contact_id: '' }); setShowDealForm({ projectId: project.id, stageId: stage.id }) }} className="mt-2 w-full h-7 text-xs text-muted-foreground gap-1">
+                                          <Plus className="w-3 h-3" /> Add deal
+                                        </Button>
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
-                              )
-                            })}
+                                )
+                              })}
+                            </div>
                           </div>
-                        </div>
-                      )}
-                    </div>
+                        )}
+                      </CardContent>
+                    </Card>
 
                     {/* Linked Contacts */}
-                    <div className="bg-white rounded-lg p-4 border border-slate-200">
-                      <h4 className="font-semibold text-slate-900 mb-3">Project Contacts ({projectContacts[project.id]?.length || 0})</h4>
-                      {projectContacts[project.id] && projectContacts[project.id].length > 0 ? (
-                        <div className="space-y-2">
-                          {projectContacts[project.id].map((contact: Contact) => (
-                            <div key={contact.id} className="flex items-start justify-between p-3 bg-slate-50 rounded border border-slate-100">
-                              <div className="flex-1">
-                                <p className="text-sm font-medium text-slate-900">
-                                  {contact.first_name} {contact.last_name}
-                                </p>
-                                {contact.email && (
-                                  <p className="text-xs text-slate-500 mt-1">{contact.email}</p>
-                                )}
-                              </div>
-                              <div className="text-right">
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                          <Users className="w-4 h-4" /> Project Contacts ({projectContacts[project.id]?.length || 0})
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {projectContacts[project.id] && projectContacts[project.id].length > 0 ? (
+                          <div className="space-y-2">
+                            {projectContacts[project.id].map((contact: Contact) => (
+                              <div key={contact.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                                <div>
+                                  <p className="text-sm font-medium text-foreground">{contact.first_name} {contact.last_name}</p>
+                                  {contact.email && <p className="text-xs text-muted-foreground">{contact.email}</p>}
+                                </div>
                                 {contact.lead_status && (
-                                  <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
-                                    contact.lead_status === 'customer' ? 'bg-green-100 text-green-700' :
-                                    contact.lead_status === 'prospect' ? 'bg-blue-100 text-blue-700' :
-                                    contact.lead_status === 'past_customer' ? 'bg-gray-100 text-gray-700' :
-                                    'bg-amber-100 text-amber-700'
-                                  }`}>
+                                  <Badge variant={contact.lead_status === 'customer' ? 'success' : contact.lead_status === 'prospect' ? 'info' : 'secondary'} className="capitalize text-xs">
                                     {contact.lead_status}
-                                  </span>
+                                  </Badge>
                                 )}
                               </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-sm text-slate-500">No contacts linked to this project yet. Assign contacts from the Contacts page.</p>
-                      )}
-                    </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground py-4 text-center">No contacts linked. Assign contacts from the Contacts page.</p>
+                        )}
+                      </CardContent>
+                    </Card>
 
-                    {/* Pledges Summary */}
-                    <div className="bg-white rounded-lg p-4 border border-slate-200">
-                      <h4 className="font-semibold text-slate-900 mb-3">Pledges & Donations</h4>
-                      <div className="grid grid-cols-3 gap-3">
-                        <div className="bg-slate-50 rounded p-3">
-                          <p className="text-xs text-slate-500">Total Pledges</p>
-                          <p className="text-lg font-semibold text-slate-900 mt-1">
-                            {projectPledgeStats[project.id]?.total_pledges || 0}
-                          </p>
+                    {/* Pledge Stats */}
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                          <DollarSign className="w-4 h-4" /> Pledges & Donations
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid grid-cols-3 gap-3">
+                          <div className="bg-muted/50 rounded-lg p-3">
+                            <p className="text-xs text-muted-foreground">Total Pledges</p>
+                            <p className="text-lg font-bold text-foreground mt-1">{projectPledgeStats[project.id]?.total_pledges || 0}</p>
+                          </div>
+                          <div className="bg-muted/50 rounded-lg p-3">
+                            <p className="text-xs text-muted-foreground">Received</p>
+                            <p className="text-lg font-bold text-emerald-600 mt-1">${(projectPledgeStats[project.id]?.total_received || 0).toLocaleString()}</p>
+                          </div>
+                          <div className="bg-muted/50 rounded-lg p-3">
+                            <p className="text-xs text-muted-foreground">Pending</p>
+                            <p className="text-lg font-bold text-amber-600 mt-1">${(projectPledgeStats[project.id]?.total_pending || 0).toLocaleString()}</p>
+                          </div>
                         </div>
-                        <div className="bg-slate-50 rounded p-3">
-                          <p className="text-xs text-slate-500">Received</p>
-                          <p className="text-lg font-semibold text-emerald-700 mt-1">
-                            ${(projectPledgeStats[project.id]?.total_received || 0).toLocaleString()}
-                          </p>
-                        </div>
-                        <div className="bg-slate-50 rounded p-3">
-                          <p className="text-xs text-slate-500">Pending</p>
-                          <p className="text-lg font-semibold text-amber-700 mt-1">
-                            ${(projectPledgeStats[project.id]?.total_pending || 0).toLocaleString()}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
+                      </CardContent>
+                    </Card>
                   </div>
                 )}
-              </div>
+              </Card>
             )
           })}
         </div>
       ) : (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-12 text-center">
-          <TrendingUp className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-          <p className="text-slate-600 text-lg font-medium">No projects yet</p>
-          <p className="text-slate-500 mt-1">Create your first project like "Destination Dawah" to get started with fundraising</p>
-        </div>
+        <Card className="p-12">
+          <EmptyState icon={TrendingUp} title="No projects yet" description='Create your first project like "Destination Dawah" to get started with fundraising' action={{ label: 'New Project', onClick: () => setShowForm(true) }} />
+        </Card>
       )}
     </div>
   )

@@ -1,6 +1,11 @@
 import { useState, useEffect } from 'react'
 import { integrationService, paymentProfileService } from '../services/api'
 import { Settings, CheckCircle, AlertCircle, RefreshCw, CreditCard } from 'lucide-react'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
 
 function IntegrationSettings() {
   const [integrations, setIntegrations] = useState<any[]>([])
@@ -84,116 +89,92 @@ function IntegrationSettings() {
     }
   }
 
-  const getStatusColor = (connected: boolean) => {
-    return connected ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
-  }
-
-  const getStatusBadgeColor = (connected: boolean) => {
-    return connected
-      ? 'bg-green-100 text-green-800'
-      : 'bg-red-100 text-red-800'
-  }
-
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <div className="bg-white border-b border-slate-200 sticky top-0 z-10">
+      <div className="bg-card border-b border-border sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-8 py-6">
           <div className="flex items-center gap-3">
-            <Settings className="w-6 h-6 text-slate-900" />
-            <h1 className="text-2xl font-bold text-slate-900">Integration Settings</h1>
+            <Settings className="w-6 h-6 text-foreground" />
+            <h1 className="text-2xl font-bold text-foreground">Integration Settings</h1>
           </div>
-          <p className="text-sm text-slate-600 mt-2">
+          <p className="text-sm text-muted-foreground mt-2">
             Connect your Falaahun to external platforms like HubSpot for seamless data syncing.
           </p>
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-8 py-8">
+      <div className="max-w-4xl mx-auto px-8 py-8 space-y-6">
         {/* Error/Success Messages */}
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
-            <p className="text-red-800">{error}</p>
+          <div className="p-4 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
+            <p className="text-red-800 dark:text-red-200">{error}</p>
           </div>
         )}
 
         {success && (
-          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-start gap-3">
-            <CheckCircle className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
-            <p className="text-green-800">{success}</p>
+          <div className="p-4 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg flex items-start gap-3">
+            <CheckCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400 mt-0.5 flex-shrink-0" />
+            <p className="text-emerald-800 dark:text-emerald-200">{success}</p>
           </div>
         )}
 
         {/* HubSpot Integration Card */}
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <div className="bg-gradient-to-r from-orange-50 to-orange-100 px-6 py-4 border-b border-slate-200">
+        <Card>
+          <CardHeader className="bg-gradient-to-r from-orange-50 to-orange-100 dark:from-orange-950/20 dark:to-orange-900/20 border-b border-border">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-xl font-bold text-slate-900">HubSpot CRM</h2>
-                <p className="text-sm text-slate-600 mt-1">
+                <CardTitle className="text-xl">HubSpot CRM</CardTitle>
+                <CardDescription className="mt-1">
                   Sync your contacts, deals, and activities to HubSpot
-                </p>
+                </CardDescription>
               </div>
-              <div className="text-right">
-                <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
-                  integrations.find(i => i.integration === 'hubspot')?.connected
-                    ? getStatusBadgeColor(true)
-                    : getStatusBadgeColor(false)
-                }`}>
-                  {integrations.find(i => i.integration === 'hubspot')?.connected
-                    ? '✓ Connected'
-                    : '✗ Disconnected'}
-                </span>
-              </div>
+              <Badge variant={integrations.find(i => i.integration === 'hubspot')?.connected ? 'success' : 'destructive'}>
+                {integrations.find(i => i.integration === 'hubspot')?.connected
+                  ? '✓ Connected'
+                  : '✗ Disconnected'}
+              </Badge>
             </div>
-          </div>
+          </CardHeader>
 
-          <div className="p-6 space-y-6">
+          <CardContent className="p-6 space-y-6">
             {/* API Key Input */}
-            <div>
-              <label className="block text-sm font-medium text-slate-900 mb-2">
-                HubSpot Private App API Key
-              </label>
-              <input
+            <div className="space-y-2">
+              <Label>HubSpot Private App API Key</Label>
+              <Input
                 type="password"
                 value={hubspotKey}
                 onChange={(e) => setHubspotKey(e.target.value)}
                 placeholder="Enter your HubSpot API key"
-                className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-400"
               />
-              <p className="text-xs text-slate-500 mt-2">
+              <p className="text-xs text-muted-foreground">
                 Get your API key from HubSpot Settings → Integrations → Private apps.
               </p>
             </div>
 
             {/* Feature List */}
             <div>
-              <h3 className="font-semibold text-slate-900 mb-3">Synced Data</h3>
+              <h3 className="font-semibold text-foreground mb-3">Synced Data</h3>
               <ul className="space-y-2">
-                <li className="flex items-center gap-3">
-                  <CheckCircle className="w-5 h-5 text-green-600" />
-                  <span className="text-slate-700">Contacts → HubSpot Contacts</span>
-                </li>
-                <li className="flex items-center gap-3">
-                  <CheckCircle className="w-5 h-5 text-green-600" />
-                  <span className="text-slate-700">Pledges → HubSpot Deals</span>
-                </li>
-                <li className="flex items-center gap-3">
-                  <CheckCircle className="w-5 h-5 text-green-600" />
-                  <span className="text-slate-700">Activities → HubSpot Tasks</span>
-                </li>
-                <li className="flex items-center gap-3">
-                  <CheckCircle className="w-5 h-5 text-green-600" />
-                  <span className="text-slate-700">Real-time sync capability</span>
-                </li>
+                {[
+                  'Contacts → HubSpot Contacts',
+                  'Pledges → HubSpot Deals',
+                  'Activities → HubSpot Tasks',
+                  'Real-time sync capability',
+                ].map((item) => (
+                  <li key={item} className="flex items-center gap-3">
+                    <CheckCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                    <span className="text-foreground">{item}</span>
+                  </li>
+                ))}
               </ul>
             </div>
 
             {/* Configuration Info */}
-            <div className="bg-slate-50 rounded-lg p-4">
-              <h4 className="font-semibold text-slate-900 mb-2">Configuration Guide</h4>
-              <ol className="text-sm text-slate-700 space-y-2 list-decimal list-inside">
+            <div className="bg-muted/50 rounded-lg p-4">
+              <h4 className="font-semibold text-foreground mb-2">Configuration Guide</h4>
+              <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
                 <li>Go to HubSpot and create a Private App</li>
                 <li>Give it these scopes: CRM contacts, deals, tasks</li>
                 <li>Copy the API key and paste it above</li>
@@ -203,114 +184,112 @@ function IntegrationSettings() {
             </div>
 
             {/* Action Buttons */}
-            <div className="flex gap-3 pt-4 border-t border-slate-200">
-              <button
+            <div className="flex gap-3 pt-4 border-t border-border">
+              <Button
                 onClick={testHubSpot}
                 disabled={!hubspotKey || loading}
-                className="flex items-center gap-2 px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition font-medium"
               >
                 {loading ? (
                   <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
                     Testing...
                   </>
                 ) : (
                   <>
-                    <CheckCircle className="w-4 h-4" />
+                    <CheckCircle className="w-4 h-4 mr-2" />
                     Test Connection
                   </>
                 )}
-              </button>
+              </Button>
             </div>
 
             {/* Last Sync Info */}
             {integrations.find(i => i.integration === 'hubspot')?.lastSync && (
-              <div className="text-xs text-slate-500 pt-2">
+              <p className="text-xs text-muted-foreground pt-2">
                 Last synced: {new Date(
                   integrations.find(i => i.integration === 'hubspot')?.lastSync
                 ).toLocaleString()}
-              </div>
+              </p>
             )}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
         {/* Manual Sync Section */}
-        <div className="mt-8 bg-white rounded-xl border border-slate-200 p-6">
-          <h3 className="text-lg font-bold text-slate-900 mb-4">Manual Sync</h3>
-          <p className="text-slate-600 mb-4">
-            Manually sync specific contacts, pledges, or activities to HubSpot.
-          </p>
-          <div className="grid grid-cols-3 gap-4">
-            <button className="px-4 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 text-sm font-medium">
-              Sync Contact
-            </button>
-            <button className="px-4 py-2 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg hover:bg-purple-100 text-sm font-medium">
-              Sync Pledge
-            </button>
-            <button className="px-4 py-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg hover:bg-amber-100 text-sm font-medium">
-              Sync Activity
-            </button>
-          </div>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Manual Sync</CardTitle>
+            <CardDescription>
+              Manually sync specific contacts, pledges, or activities to HubSpot.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-3 gap-4">
+              <Button variant="outline" className="border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30">
+                Sync Contact
+              </Button>
+              <Button variant="outline" className="border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/30">
+                Sync Pledge
+              </Button>
+              <Button variant="outline" className="border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30">
+                Sync Activity
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* PayFast Donation Gateway */}
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden mt-6">
-          <div className="bg-gradient-to-r from-blue-50 to-blue-100 px-6 py-4 border-b border-slate-200">
+        <Card>
+          <CardHeader className="bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-950/20 dark:to-blue-900/20 border-b border-border">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <CreditCard className="w-5 h-5 text-blue-700" />
+                <CreditCard className="w-5 h-5 text-blue-700 dark:text-blue-400" />
                 <div>
-                  <h2 className="text-xl font-bold text-slate-900">Donation Payment Gateway</h2>
-                  <p className="text-sm text-slate-600 mt-0.5">Connect your own PayFast merchant account to receive donations directly.</p>
+                  <CardTitle className="text-xl">Donation Payment Gateway</CardTitle>
+                  <CardDescription className="mt-0.5">Connect your own PayFast merchant account to receive donations directly.</CardDescription>
                 </div>
               </div>
-              <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                pfProfile?.donations_enabled ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-600'
-              }`}>
+              <Badge variant={pfProfile?.donations_enabled ? 'success' : 'secondary'}>
                 {pfProfile?.donations_enabled ? '✓ Enabled' : 'Not configured'}
-              </span>
+              </Badge>
             </div>
-          </div>
-          <div className="p-6 space-y-4">
+          </CardHeader>
+          <CardContent className="p-6 space-y-4">
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-900 mb-1">Merchant ID</label>
-                <input
+              <div className="space-y-2">
+                <Label>Merchant ID</Label>
+                <Input
                   type="text"
                   value={pfForm.merchant_id}
                   onChange={(e) => setPfForm({ ...pfForm, merchant_id: e.target.value })}
                   placeholder="10000100"
-                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-400 text-sm"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-900 mb-1">Merchant Key</label>
-                <input
+              <div className="space-y-2">
+                <Label>Merchant Key</Label>
+                <Input
                   type="password"
                   value={pfForm.merchant_key}
                   onChange={(e) => setPfForm({ ...pfForm, merchant_key: e.target.value })}
                   placeholder={pfProfile ? '(stored securely, enter to update)' : 'Your merchant key'}
-                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-400 text-sm"
                 />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-900 mb-1">Passphrase (optional)</label>
-                <input
+              <div className="space-y-2">
+                <Label>Passphrase (optional)</Label>
+                <Input
                   type="password"
                   value={pfForm.passphrase}
                   onChange={(e) => setPfForm({ ...pfForm, passphrase: e.target.value })}
                   placeholder="Only if set in PayFast"
-                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-400 text-sm"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-900 mb-1">Mode</label>
+              <div className="space-y-2">
+                <Label>Mode</Label>
                 <select
                   value={pfForm.mode}
                   onChange={(e) => setPfForm({ ...pfForm, mode: e.target.value as 'sandbox' | 'live' })}
-                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-400 text-sm"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 >
                   <option value="sandbox">Sandbox (testing)</option>
                   <option value="live">Live</option>
@@ -323,54 +302,56 @@ function IntegrationSettings() {
                 type="checkbox"
                 checked={pfForm.donations_enabled}
                 onChange={(e) => setPfForm({ ...pfForm, donations_enabled: e.target.checked })}
-                className="w-4 h-4 rounded border-slate-300 text-emerald-600"
+                className="w-4 h-4 rounded border-input text-primary"
               />
-              <label htmlFor="donations_enabled" className="text-sm text-slate-700">Enable donation payments for this organisation</label>
+              <Label htmlFor="donations_enabled" className="font-normal">Enable donation payments for this organisation</Label>
             </div>
             <div className="pt-2">
-              <button
+              <Button
                 onClick={savePaymentProfile}
                 disabled={pfLoading || !pfForm.merchant_id || !pfForm.merchant_key}
-                className="flex items-center gap-2 px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-sm font-medium"
               >
-                {pfLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                {pfLoading ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle className="w-4 h-4 mr-2" />}
                 {pfSaved ? 'Saved!' : 'Save Gateway Credentials'}
-              </button>
+              </Button>
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-muted-foreground">
               Credentials are stored encrypted per organisation and are never shared with other accounts.
               Get your merchant ID &amp; key from your PayFast dashboard → Integration → Merchant Details.
             </p>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
         {/* Status Panel */}
-        <div className="mt-8 grid grid-cols-2 gap-4">
-          {integrations.map((integration) => (
-            <div
-              key={integration.integration}
-              className={`rounded-lg border p-4 ${getStatusColor(integration.connected)}`}
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <h4 className="font-semibold text-slate-900 capitalize">
-                    {integration.integration}
-                  </h4>
-                  <p className={`text-sm mt-1 ${
-                    integration.connected
-                      ? 'text-green-700'
-                      : 'text-red-700'
-                  }`}>
-                    {integration.connected ? '✓ Connected' : '✗ Not Connected'}
-                  </p>
-                </div>
-              </div>
-              {integration.error && (
-                <p className="text-xs text-red-700 mt-2">{integration.error}</p>
-              )}
-            </div>
-          ))}
-        </div>
+        {integrations.length > 0 && (
+          <div className="grid grid-cols-2 gap-4">
+            {integrations.map((integration) => (
+              <Card
+                key={integration.integration}
+                className={integration.connected
+                  ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20'
+                  : 'border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20'
+                }
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h4 className="font-semibold text-foreground capitalize">
+                        {integration.integration}
+                      </h4>
+                      <Badge variant={integration.connected ? 'success' : 'destructive'} className="mt-1">
+                        {integration.connected ? '✓ Connected' : '✗ Not Connected'}
+                      </Badge>
+                    </div>
+                  </div>
+                  {integration.error && (
+                    <p className="text-xs text-red-700 dark:text-red-400 mt-2">{integration.error}</p>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )

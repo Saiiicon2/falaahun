@@ -1,6 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, Pencil, Trash2, RotateCcw } from 'lucide-react'
+import { Plus, Pencil, Trash2, RotateCcw, DollarSign } from 'lucide-react'
 import { contactService, pledgeService, projectService } from '../services/api'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { TableSkeleton } from '@/components/ui/loading-skeletons'
+import { EmptyState } from '@/components/ui/empty-state'
+import { useToast } from '@/hooks/use-toast'
 
 type PledgeStatus = 'pending' | 'received' | 'failed'
 type PledgeType = 'donation' | 'pledge' | 'zakat' | 'sadaqah'
@@ -59,6 +69,7 @@ const defaultForm: PledgeForm = {
 }
 
 function Pledges() {
+  const { toast } = useToast()
   const [pledges, setPledges] = useState<PledgeRow[]>([])
   const [contacts, setContacts] = useState<ContactOption[]>([])
   const [projects, setProjects] = useState<ProjectOption[]>([])
@@ -191,7 +202,7 @@ function Pledges() {
 
     const amount = Number(createForm.amount)
     if (!createForm.contactId || Number.isNaN(amount) || amount <= 0) {
-      alert('Select a contact and enter a valid amount.')
+      toast({ title: 'Select a contact and enter a valid amount', variant: 'destructive' })
       return
     }
 
@@ -213,9 +224,10 @@ function Pledges() {
       setCreateForm(defaultForm)
       setShowCreate(false)
       await loadData()
+      toast({ title: 'Pledge created', variant: 'success' })
     } catch (error: any) {
       console.error('Error creating pledge:', error)
-      alert(error.response?.data?.error || 'Failed to create pledge')
+      toast({ title: error.response?.data?.error || 'Failed to create pledge', variant: 'destructive' })
     } finally {
       setSubmitting(false)
     }
@@ -228,7 +240,7 @@ function Pledges() {
 
     const amount = Number(editForm.amount)
     if (!editForm.contactId || Number.isNaN(amount) || amount <= 0) {
-      alert('Select a contact and enter a valid amount.')
+      toast({ title: 'Select a contact and enter a valid amount', variant: 'destructive' })
       return
     }
 
@@ -250,9 +262,10 @@ function Pledges() {
       setEditingPledge(null)
       setEditForm(defaultForm)
       await loadData()
+      toast({ title: 'Pledge updated', variant: 'success' })
     } catch (error: any) {
       console.error('Error updating pledge:', error)
-      alert(error.response?.data?.error || 'Failed to update pledge')
+      toast({ title: error.response?.data?.error || 'Failed to update pledge', variant: 'destructive' })
     } finally {
       setSubmitting(false)
     }
@@ -262,21 +275,24 @@ function Pledges() {
     try {
       await pledgeService.update(id, { status })
       setPledges((prev) => prev.map((row) => (row.id === id ? { ...row, status } : row)))
+      toast({ title: 'Status updated', variant: 'success' })
     } catch (error) {
       console.error('Error updating status:', error)
-      alert('Failed to update pledge status')
+      toast({ title: 'Failed to update status', variant: 'destructive' })
     }
   }
 
-  const removePledge = async (id: string) => {
-    if (!window.confirm('Delete this pledge permanently?')) return
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
 
+  const removePledge = async (id: string) => {
     try {
       await pledgeService.delete(id)
       setPledges((prev) => prev.filter((row) => row.id !== id))
+      setDeleteTarget(null)
+      toast({ title: 'Pledge deleted', variant: 'success' })
     } catch (error) {
       console.error('Error deleting pledge:', error)
-      alert('Failed to delete pledge')
+      toast({ title: 'Failed to delete pledge', variant: 'destructive' })
     }
   }
 
@@ -289,358 +305,238 @@ function Pledges() {
   ) => (
     <form onSubmit={(e) => void onSubmit(e)} className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Contact</label>
-          <select
-            value={form.contactId}
-            onChange={(e) => setForm((prev) => ({ ...prev, contactId: e.target.value }))}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2"
-            required
-          >
+        <div className="space-y-2">
+          <Label>Contact</Label>
+          <select value={form.contactId} onChange={(e) => setForm((prev) => ({ ...prev, contactId: e.target.value }))} className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm" required>
             <option value="">Select contact</option>
             {contacts.map((contact) => (
-              <option key={contact.id} value={contact.id}>
-                {contact.first_name} {contact.last_name}
-              </option>
+              <option key={contact.id} value={contact.id}>{contact.first_name} {contact.last_name}</option>
             ))}
           </select>
         </div>
-
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Amount</label>
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            value={form.amount}
-            onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2"
-            required
-          />
+        <div className="space-y-2">
+          <Label>Amount</Label>
+          <Input type="number" step="0.01" min="0" value={form.amount} onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))} required />
         </div>
       </div>
 
       <div className="grid grid-cols-4 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Currency</label>
-          <input
-            type="text"
-            value={form.currency}
-            onChange={(e) => setForm((prev) => ({ ...prev, currency: e.target.value.toUpperCase() }))}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2"
-            maxLength={3}
-          />
+        <div className="space-y-2">
+          <Label>Currency</Label>
+          <Input type="text" value={form.currency} onChange={(e) => setForm((prev) => ({ ...prev, currency: e.target.value.toUpperCase() }))} maxLength={3} />
         </div>
-
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Type</label>
-          <select
-            value={form.type}
-            onChange={(e) => setForm((prev) => ({ ...prev, type: e.target.value as PledgeType }))}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2"
-          >
+        <div className="space-y-2">
+          <Label>Type</Label>
+          <select value={form.type} onChange={(e) => setForm((prev) => ({ ...prev, type: e.target.value as PledgeType }))} className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm">
             <option value="donation">Donation</option>
             <option value="pledge">Pledge</option>
             <option value="zakat">Zakat</option>
             <option value="sadaqah">Sadaqah</option>
           </select>
         </div>
-
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Status</label>
-          <select
-            value={form.status}
-            onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value as PledgeStatus }))}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2"
-          >
+        <div className="space-y-2">
+          <Label>Status</Label>
+          <select value={form.status} onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value as PledgeStatus }))} className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm">
             <option value="pending">Pending</option>
             <option value="received">Received</option>
             <option value="failed">Failed</option>
           </select>
         </div>
-
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Payment Method</label>
-          <input
-            type="text"
-            value={form.paymentMethod}
-            onChange={(e) => setForm((prev) => ({ ...prev, paymentMethod: e.target.value }))}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2"
-            placeholder="cash, bank, card"
-          />
+        <div className="space-y-2">
+          <Label>Payment Method</Label>
+          <Input type="text" value={form.paymentMethod} onChange={(e) => setForm((prev) => ({ ...prev, paymentMethod: e.target.value }))} placeholder="cash, bank, card" />
         </div>
       </div>
 
       <div className="grid grid-cols-3 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Expected Date</label>
-          <input
-            type="date"
-            value={form.expectedDate}
-            onChange={(e) => setForm((prev) => ({ ...prev, expectedDate: e.target.value }))}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2"
-          />
+        <div className="space-y-2">
+          <Label>Expected Date</Label>
+          <Input type="date" value={form.expectedDate} onChange={(e) => setForm((prev) => ({ ...prev, expectedDate: e.target.value }))} />
         </div>
-
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Received Date</label>
-          <input
-            type="date"
-            value={form.receivedDate}
-            onChange={(e) => setForm((prev) => ({ ...prev, receivedDate: e.target.value }))}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2"
-          />
+        <div className="space-y-2">
+          <Label>Received Date</Label>
+          <Input type="date" value={form.receivedDate} onChange={(e) => setForm((prev) => ({ ...prev, receivedDate: e.target.value }))} />
         </div>
-
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Transaction ID</label>
-          <input
-            type="text"
-            value={form.transactionId}
-            onChange={(e) => setForm((prev) => ({ ...prev, transactionId: e.target.value }))}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2"
-          />
+        <div className="space-y-2">
+          <Label>Transaction ID</Label>
+          <Input type="text" value={form.transactionId} onChange={(e) => setForm((prev) => ({ ...prev, transactionId: e.target.value }))} />
         </div>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">Notes</label>
-        <textarea
-          value={form.notes}
-          onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 resize-none"
-          rows={3}
-          placeholder="Add any notes about this pledge"
-        />
+      <div className="space-y-2">
+        <Label>Notes</Label>
+        <Textarea value={form.notes} onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))} rows={3} placeholder="Add any notes about this pledge" />
       </div>
 
-      <div className="flex gap-3">
-        <button
-          type="submit"
-          disabled={submitting}
-          className="bg-emerald-600 text-white px-5 py-2 rounded-lg hover:bg-emerald-700 disabled:opacity-60"
-        >
-          {submitting ? 'Saving...' : submitLabel}
-        </button>
-
-        {onCancel ? (
-          <button
-            type="button"
-            onClick={onCancel}
-            className="border border-slate-300 text-slate-700 px-5 py-2 rounded-lg hover:bg-slate-50"
-          >
-            Cancel
-          </button>
-        ) : null}
+      <div className="flex gap-3 justify-end">
+        {onCancel && <Button type="button" variant="outline" onClick={onCancel}>Cancel</Button>}
+        <Button type="submit" disabled={submitting}>{submitting ? 'Saving...' : submitLabel}</Button>
       </div>
     </form>
   )
 
   if (loading) {
-    return <div className="p-8 text-center text-slate-600">Loading pledges...</div>
+    return <div className="flex-1 p-6 bg-background"><TableSkeleton /></div>
   }
 
   return (
-    <div className="p-8 bg-slate-50 min-h-screen">
+    <div className="flex-1 p-6 bg-background min-h-screen">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Pledges</h1>
-          <p className="text-slate-500 mt-1">Track donations, pledges, and fulfillment status.</p>
+          <h1 className="text-2xl font-bold text-foreground">Pledges</h1>
+          <p className="text-muted-foreground text-sm mt-1">Track donations, pledges, and fulfillment status</p>
         </div>
-
-        <button
-          onClick={() => setShowCreate((prev) => !prev)}
-          className="bg-gradient-to-r from-emerald-500 to-emerald-600 text-white px-5 py-3 rounded-lg hover:from-emerald-600 hover:to-emerald-700 flex items-center gap-2"
-        >
-          <Plus className="w-5 h-5" />
-          New Pledge
-        </button>
+        <Button onClick={() => setShowCreate(true)} className="gap-2">
+          <Plus className="w-4 h-4" /> New Pledge
+        </Button>
       </div>
 
+      {/* Summary Cards */}
       <div className="grid grid-cols-4 gap-4 mb-6">
-        <div className="bg-white rounded-lg p-4 border border-slate-200">
-          <p className="text-xs text-slate-500">Filtered Count</p>
-          <p className="text-2xl font-semibold text-slate-900 mt-2">{totals.count}</p>
-        </div>
-        <div className="bg-white rounded-lg p-4 border border-slate-200">
-          <p className="text-xs text-slate-500">Total Amount</p>
-          <p className="text-2xl font-semibold text-slate-900 mt-2">{formatCurrency(totals.total)}</p>
-        </div>
-        <div className="bg-white rounded-lg p-4 border border-slate-200">
-          <p className="text-xs text-slate-500">Received</p>
-          <p className="text-2xl font-semibold text-emerald-700 mt-2">{formatCurrency(totals.received)}</p>
-        </div>
-        <div className="bg-white rounded-lg p-4 border border-slate-200">
-          <p className="text-xs text-slate-500">Pending</p>
-          <p className="text-2xl font-semibold text-amber-700 mt-2">{formatCurrency(totals.pending)}</p>
-        </div>
+        {[
+          { label: 'Filtered Count', value: totals.count, color: 'text-foreground' },
+          { label: 'Total Amount', value: formatCurrency(totals.total), color: 'text-foreground' },
+          { label: 'Received', value: formatCurrency(totals.received), color: 'text-emerald-600' },
+          { label: 'Pending', value: formatCurrency(totals.pending), color: 'text-amber-600' },
+        ].map((stat) => (
+          <Card key={stat.label}>
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">{stat.label}</p>
+              <p className={`text-2xl font-bold mt-1 ${stat.color}`}>{stat.value}</p>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
-      {showCreate ? (
-        <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
-          <h2 className="text-lg font-semibold text-slate-900 mb-4">Create Pledge</h2>
-          {renderPledgeForm(createForm, setCreateForm, submitCreate, 'Create Pledge', () => {
-            setShowCreate(false)
-            setCreateForm(defaultForm)
-          })}
-        </div>
-      ) : null}
+      {/* Create Dialog */}
+      <Dialog open={showCreate} onOpenChange={setShowCreate}>
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Create Pledge</DialogTitle></DialogHeader>
+          {renderPledgeForm(createForm, setCreateForm, submitCreate, 'Create Pledge', () => { setShowCreate(false); setCreateForm(defaultForm) })}
+        </DialogContent>
+      </Dialog>
 
-      {editingPledge ? (
-        <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
-          <h2 className="text-lg font-semibold text-slate-900 mb-4">Edit Pledge</h2>
-          {renderPledgeForm(editForm, setEditForm, submitEdit, 'Update Pledge', () => {
-            setEditingPledge(null)
-            setEditForm(defaultForm)
-          })}
-        </div>
-      ) : null}
+      {/* Edit Dialog */}
+      <Dialog open={!!editingPledge} onOpenChange={() => { setEditingPledge(null); setEditForm(defaultForm) }}>
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Edit Pledge</DialogTitle></DialogHeader>
+          {renderPledgeForm(editForm, setEditForm, submitEdit, 'Update Pledge', () => { setEditingPledge(null); setEditForm(defaultForm) })}
+        </DialogContent>
+      </Dialog>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-4 mb-4">
-        <div className="grid grid-cols-5 gap-3">
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="border border-slate-200 rounded-lg px-3 py-2"
-            placeholder="Search by contact, notes, amount"
-          />
+      {/* Delete Confirmation */}
+      <Dialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Delete Pledge</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">Are you sure you want to permanently delete this pledge?</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={() => deleteTarget && removePledge(deleteTarget)}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as 'all' | PledgeStatus)}
-            className="border border-slate-200 rounded-lg px-3 py-2"
-          >
-            <option value="all">All Statuses</option>
-            <option value="pending">Pending</option>
-            <option value="received">Received</option>
-            <option value="failed">Failed</option>
-          </select>
+      {/* Filters */}
+      <Card className="mb-4">
+        <CardContent className="p-4">
+          <div className="grid grid-cols-5 gap-3">
+            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by contact, notes, amount" />
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as 'all' | PledgeStatus)} className="bg-background border border-input rounded-md px-3 py-2 text-sm">
+              <option value="all">All Statuses</option>
+              <option value="pending">Pending</option>
+              <option value="received">Received</option>
+              <option value="failed">Failed</option>
+            </select>
+            <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as 'all' | PledgeType)} className="bg-background border border-input rounded-md px-3 py-2 text-sm">
+              <option value="all">All Types</option>
+              <option value="donation">Donation</option>
+              <option value="pledge">Pledge</option>
+              <option value="zakat">Zakat</option>
+              <option value="sadaqah">Sadaqah</option>
+            </select>
+            <select value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)} className="bg-background border border-input rounded-md px-3 py-2 text-sm">
+              <option value="all">All Projects</option>
+              {projects.map((project) => (<option key={project.id} value={project.id}>{project.name}</option>))}
+            </select>
+            <select value={contactFilter} onChange={(e) => setContactFilter(e.target.value)} className="bg-background border border-input rounded-md px-3 py-2 text-sm">
+              <option value="all">All Contacts</option>
+              {contacts.map((contact) => (<option key={contact.id} value={contact.id}>{contact.first_name} {contact.last_name}</option>))}
+            </select>
+          </div>
+          <Button variant="ghost" size="sm" onClick={resetFilters} className="mt-3 gap-1.5 text-muted-foreground">
+            <RotateCcw className="w-3.5 h-3.5" /> Reset Filters
+          </Button>
+        </CardContent>
+      </Card>
 
-          <select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value as 'all' | PledgeType)}
-            className="border border-slate-200 rounded-lg px-3 py-2"
-          >
-            <option value="all">All Types</option>
-            <option value="donation">Donation</option>
-            <option value="pledge">Pledge</option>
-            <option value="zakat">Zakat</option>
-            <option value="sadaqah">Sadaqah</option>
-          </select>
-
-          <select
-            value={projectFilter}
-            onChange={(e) => setProjectFilter(e.target.value)}
-            className="border border-slate-200 rounded-lg px-3 py-2"
-          >
-            <option value="all">All Projects</option>
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={contactFilter}
-            onChange={(e) => setContactFilter(e.target.value)}
-            className="border border-slate-200 rounded-lg px-3 py-2"
-          >
-            <option value="all">All Contacts</option>
-            {contacts.map((contact) => (
-              <option key={contact.id} value={contact.id}>
-                {contact.first_name} {contact.last_name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="mt-3">
-          <button
-            onClick={resetFilters}
-            className="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900"
-          >
-            <RotateCcw className="w-4 h-4" />
-            Reset Filters
-          </button>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      {/* Table */}
+      <Card>
         {filteredPledges.length === 0 ? (
-          <p className="text-center py-10 text-slate-500">No pledges match the current filters.</p>
+          <div className="p-8">
+            <EmptyState icon={DollarSign} title="No pledges found" description="No pledges match the current filters" />
+          </div>
         ) : (
-          <table className="w-full">
-            <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Contact</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Project</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Amount</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Type</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Status</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Expected</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Created</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {filteredPledges.map((pledge) => {
-                const contact = contactById.get(pledge.contact_id)
-                const project = contact?.project_id ? projectById.get(contact.project_id) : undefined
+          <div className="overflow-auto">
+            <table className="w-full">
+              <thead className="bg-muted/50 border-b">
+                <tr>
+                  {['Contact', 'Project', 'Amount', 'Type', 'Status', 'Expected', 'Created', 'Actions'].map(h => (
+                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {filteredPledges.map((pledge) => {
+                  const contact = contactById.get(pledge.contact_id)
+                  const project = contact?.project_id ? projectById.get(contact.project_id) : undefined
 
-                return (
-                  <tr key={pledge.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 text-sm text-slate-900 font-medium">
-                      {contact ? `${contact.first_name} ${contact.last_name}` : 'Unknown contact'}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{project?.name || 'Unlinked'}</td>
-                    <td className="px-4 py-3 text-sm text-slate-900">
-                      {formatCurrency(pledge.amount, pledge.currency || 'USD')}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-slate-600 capitalize">{pledge.type}</td>
-                    <td className="px-4 py-3 text-sm">
-                      <select
-                        value={pledge.status}
-                        onChange={(e) => void updateStatus(pledge.id, e.target.value as PledgeStatus)}
-                        className="border border-slate-200 rounded px-2 py-1 text-sm"
-                      >
-                        <option value="pending">Pending</option>
-                        <option value="received">Received</option>
-                        <option value="failed">Failed</option>
-                      </select>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-slate-600">
-                      {pledge.expected_date ? new Date(pledge.expected_date).toLocaleDateString() : '-'}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-slate-600">
-                      {new Date(pledge.created_at).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => startEdit(pledge)}
-                          className="p-2 text-slate-600 hover:bg-slate-100 rounded"
-                          title="Edit"
+                  return (
+                    <tr key={pledge.id} className="hover:bg-muted/30 transition-colors">
+                      <td className="px-4 py-3 text-sm font-medium text-foreground">
+                        {contact ? `${contact.first_name} ${contact.last_name}` : 'Unknown'}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground">{project?.name || 'Unlinked'}</td>
+                      <td className="px-4 py-3 text-sm font-semibold text-foreground">
+                        {formatCurrency(pledge.amount, pledge.currency || 'USD')}
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge variant="outline" className="capitalize text-xs">{pledge.type}</Badge>
+                      </td>
+                      <td className="px-4 py-3">
+                        <select
+                          value={pledge.status}
+                          onChange={(e) => void updateStatus(pledge.id, e.target.value as PledgeStatus)}
+                          className="bg-background border border-input rounded-md px-2 py-1 text-xs"
                         >
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => void removePledge(pledge.id)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+                          <option value="pending">Pending</option>
+                          <option value="received">Received</option>
+                          <option value="failed">Failed</option>
+                        </select>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground">
+                        {pledge.expected_date ? new Date(pledge.expected_date).toLocaleDateString() : '-'}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground">
+                        {new Date(pledge.created_at).toLocaleDateString()}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startEdit(pledge)} title="Edit">
+                            <Pencil className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => setDeleteTarget(pledge.id)} title="Delete">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
-      </div>
+      </Card>
     </div>
   )
 }

@@ -11,6 +11,7 @@ import IntegrationSettings from './pages/IntegrationSettings'
 import OrganizationSettings from './pages/OrganizationSettings'
 import Billing from './pages/Billing'
 import Login from './pages/Login'
+import { Toaster } from './components/ui/toaster'
 import { billingService } from './services/api'
 import './App.css'
 
@@ -19,6 +20,14 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [billingLoading, setBillingLoading] = useState(false)
   const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null)
+
+  // Initialize dark mode from localStorage
+  useEffect(() => {
+    const theme = localStorage.getItem('theme')
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark')
+    }
+  }, [])
 
   useEffect(() => {
     const token = localStorage.getItem('token')
@@ -52,10 +61,10 @@ function App() {
   const renderPremiumElement = (element: JSX.Element) => {
     if (billingLoading) {
       return (
-        <div className="flex items-center justify-center h-screen">
+        <div className="flex items-center justify-center h-screen bg-background">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
-            <p className="text-slate-600">Checking subscription...</p>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Checking subscription...</p>
           </div>
         </div>
       )
@@ -70,10 +79,12 @@ function App() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen">
+      <div className="flex items-center justify-center h-screen bg-background">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
-          <p className="text-slate-600">Loading...</p>
+          <div className="relative">
+            <div className="animate-spin rounded-full h-14 w-14 border-[3px] border-muted border-t-primary mx-auto"></div>
+          </div>
+          <p className="text-muted-foreground mt-4 text-sm font-medium">Loading Falaahun...</p>
         </div>
       </div>
     )
@@ -84,7 +95,7 @@ function App() {
       {!isAuthenticated ? (
         <Login />
       ) : (
-        <div className="flex h-screen bg-slate-50">
+        <div className="flex h-screen bg-background">
           <Sidebar />
           <main className="flex-1 overflow-auto">
             <Routes>
@@ -103,6 +114,7 @@ function App() {
           </main>
         </div>
       )}
+      <Toaster />
     </Router>
   )
 }

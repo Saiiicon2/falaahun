@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
 import { AlertCircle, CheckCircle2, CreditCard, Loader2 } from 'lucide-react'
 import { billingService } from '../services/api'
+import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
 
 type Plan = {
   key: string
@@ -153,92 +157,123 @@ function Billing() {
   const isSandbox    = statusData.sandbox
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="bg-white border-b border-slate-200 sticky top-0 z-10">
+    <div className="min-h-screen bg-background">
+      <div className="bg-card border-b border-border sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-8 py-6">
           <div className="flex items-center gap-3">
-            <CreditCard className="w-6 h-6 text-slate-900" />
-            <h1 className="text-2xl font-bold text-slate-900">Billing</h1>
+            <CreditCard className="w-6 h-6 text-foreground" />
+            <h1 className="text-2xl font-bold text-foreground">Billing</h1>
           </div>
-          <p className="text-sm text-slate-600 mt-2">Manage your subscription and payment settings</p>
+          <p className="text-sm text-muted-foreground mt-2">Manage your subscription and payment settings</p>
         </div>
       </div>
 
       <div className="max-w-6xl mx-auto px-8 py-8 space-y-6">
         {isSandbox && (
-          <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
-            <strong>Sandbox mode:</strong> Payments go to PayFast sandbox. Use test credentials to complete checkout. Set <code>PAYFAST_SANDBOX=false</code> on the backend to go live.
+          <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg text-sm text-amber-800 dark:text-amber-200">
+            <strong>Sandbox mode:</strong> Payments go to PayFast sandbox. Use test credentials to complete checkout. Set <code className="bg-amber-100 dark:bg-amber-900 px-1 py-0.5 rounded text-xs">PAYFAST_SANDBOX=false</code> on the backend to go live.
           </div>
         )}
         {error && (
-          <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
-            <p className="text-red-800">{error}</p>
+          <div className="p-4 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
+            <p className="text-red-800 dark:text-red-200">{error}</p>
           </div>
         )}
 
         {success && (
-          <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg flex items-start gap-3">
-            <CheckCircle2 className="w-5 h-5 text-emerald-600 mt-0.5 flex-shrink-0" />
-            <p className="text-emerald-800">{success}</p>
+          <div className="p-4 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg flex items-start gap-3">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 mt-0.5 flex-shrink-0" />
+            <p className="text-emerald-800 dark:text-emerald-200">{success}</p>
           </div>
         )}
 
-        <div className="bg-white border border-slate-200 rounded-xl p-6">
-          {loading ? (
-            <div className="flex items-center gap-3 text-slate-600">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Loading billing status...</span>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <p className="text-sm text-slate-500">Organisation</p>
-                <p className="text-slate-900 font-semibold">{statusData.organization?.name || '-'}</p>
+        <Card>
+          <CardContent className="p-6">
+            {loading ? (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i}>
+                    <Skeleton className="h-4 w-20 mb-2" />
+                    <Skeleton className="h-5 w-32" />
+                  </div>
+                ))}
               </div>
-              <div>
-                <p className="text-sm text-slate-500">Plan</p>
-                <p className="text-slate-900 font-semibold">{activePlan}</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Organisation</p>
+                  <p className="text-foreground font-semibold">{statusData.organization?.name || '-'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Plan</p>
+                  <p className="text-foreground font-semibold">{activePlan}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Status</p>
+                  <Badge variant={subscription?.status === 'active' ? 'success' : 'secondary'} className="mt-1">
+                    {subscription?.status || 'not started'}
+                  </Badge>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-slate-500">Status</p>
-                <p className="text-slate-900 font-semibold capitalize">{subscription?.status || 'not started'}</p>
-              </div>
-            </div>
-          )}
-        </div>
+            )}
+          </CardContent>
+        </Card>
 
         <div>
-          <h2 className="text-lg font-semibold text-slate-900 mb-4">Choose a Plan</h2>
-          <p className="text-sm text-slate-500 mb-4">All prices in ZAR (South African Rand). Billed monthly via PayFast.</p>
+          <h2 className="text-lg font-semibold text-foreground mb-2">Choose a Plan</h2>
+          <p className="text-sm text-muted-foreground mb-4">All prices in ZAR (South African Rand). Billed monthly via PayFast.</p>
           {loading ? (
-            <p className="text-slate-500 text-sm">Loading plans...</p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Card key={i}>
+                  <CardHeader>
+                    <Skeleton className="h-4 w-16 mb-2" />
+                    <Skeleton className="h-8 w-24" />
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {Array.from({ length: 4 }).map((_, j) => (
+                      <Skeleton key={j} className="h-4 w-full" />
+                    ))}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           ) : plans.length === 0 ? (
-            <p className="text-slate-500 text-sm">No plans available. Check backend configuration.</p>
+            <p className="text-muted-foreground text-sm">No plans available. Check backend configuration.</p>
           ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {plans.map((plan) => (
-              <div key={plan.key} className="bg-white border border-slate-200 rounded-xl p-6 flex flex-col">
-                <p className="text-sm uppercase tracking-wide text-slate-500 font-medium">{plan.key}</p>
-                <p className="text-3xl font-bold text-slate-900 mt-2">R{plan.amount}<span className="text-base font-normal text-slate-500">/mo</span></p>
-                <p className="text-sm text-slate-500 mt-2">{plan.description}</p>
-                <ul className="mt-4 space-y-2 flex-1">
-                  {plan.features.map((f) => (
-                    <li key={f} className="flex items-start gap-2 text-sm text-slate-700">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" />
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-                <button
-                  onClick={() => startCheckout(plan.key)}
-                  disabled={redirecting}
-                  className="mt-6 px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-60 flex items-center justify-center gap-2"
-                >
-                  {redirecting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                  Subscribe via PayFast
-                </button>
-              </div>
+            {plans.map((plan, idx) => (
+              <Card key={plan.key} className={idx === 1 ? 'border-primary shadow-md ring-1 ring-primary/20' : ''}>
+                <CardHeader>
+                  <CardDescription className="uppercase tracking-wide font-medium">{plan.key}</CardDescription>
+                  <CardTitle className="text-3xl">
+                    R{plan.amount}<span className="text-base font-normal text-muted-foreground">/mo</span>
+                  </CardTitle>
+                  <CardDescription>{plan.description}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ul className="space-y-2.5">
+                    {plan.features.map((f) => (
+                      <li key={f} className="flex items-start gap-2 text-sm text-foreground">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" />
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+                <CardFooter>
+                  <Button
+                    onClick={() => startCheckout(plan.key)}
+                    disabled={redirecting}
+                    className="w-full"
+                    variant={idx === 1 ? 'default' : 'outline'}
+                  >
+                    {redirecting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                    Subscribe via PayFast
+                  </Button>
+                </CardFooter>
+              </Card>
             ))}
           </div>
           )}
