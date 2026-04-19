@@ -338,6 +338,19 @@ CREATE TABLE IF NOT EXISTS webhook_events (
   UNIQUE (provider, provider_reference)
 );
 
+-- Notification log for payment and subscription alerts
+CREATE TABLE IF NOT EXISTS notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  type VARCHAR(50) NOT NULL,
+  message TEXT NOT NULL,
+  reference_id VARCHAR(255),
+  payload_json JSONB DEFAULT '{}',
+  read BOOLEAN DEFAULT false,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- HubSpot sync error tracking
 ALTER TABLE contacts ADD COLUMN IF NOT EXISTS hubspot_sync_error TEXT;
 ALTER TABLE pledges ADD COLUMN IF NOT EXISTS hubspot_sync_error TEXT;

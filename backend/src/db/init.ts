@@ -365,7 +365,23 @@ const initializeDatabase = async () => {
       );
     `)
 
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS notifications (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        type VARCHAR(50) NOT NULL,
+        message TEXT NOT NULL,
+        reference_id VARCHAR(255),
+        payload_json JSONB DEFAULT '{}',
+        read BOOLEAN DEFAULT false,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `)
+
     await pool.query('CREATE INDEX IF NOT EXISTS idx_webhook_events_provider ON webhook_events(provider, provider_reference);')
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_notification_org ON notifications(organization_id);')
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_notification_org ON notifications(organization_id);')
     await pool.query('CREATE INDEX IF NOT EXISTS idx_payment_profiles_org ON organization_payment_profiles(organization_id);')
 
     console.log('✅ Database schema initialized successfully')

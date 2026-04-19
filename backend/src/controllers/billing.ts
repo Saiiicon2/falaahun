@@ -7,10 +7,30 @@ import {
   PAYFAST_SANDBOX_URL,
   PAYFAST_LIVE_URL,
 } from '../services/payfast'
+import { notificationModel } from '../models/notification'
 
 // Default to sandbox unless PAYFAST_SANDBOX is explicitly set to 'false'.
 // This prevents accidental live transactions when env vars are missing.
 const isSandbox = () => process.env.PAYFAST_SANDBOX !== 'false'
+
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || ''
+const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || ''
+const STRIPE_CURRENCY = (process.env.STRIPE_CURRENCY || 'zar').toLowerCase()
+
+const getStripeMode = () => {
+  if (!STRIPE_SECRET_KEY) return 'disabled'
+  if (STRIPE_SECRET_KEY.startsWith('sk_test_')) return 'sandbox'
+  if (STRIPE_SECRET_KEY.startsWith('sk_live_')) return 'live'
+  return process.env.STRIPE_SANDBOX !== 'false' ? 'sandbox' : 'live'
+}
+
+const getStripe = () => {
+  if (!STRIPE_SECRET_KEY) {
+    return null
+  }
+
+  return new Stripe(STRIPE_SECRET_KEY)
+}
 
 const PLANS: Record<string, { label: string; amount: string }> = {
   starter: {
@@ -27,25 +47,31 @@ const PLANS: Record<string, { label: string; amount: string }> = {
   },
 }
 
-const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || ''
-const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || ''
-
-const getStripe = () => {
-  if (!STRIPE_SECRET_KEY) {
-    return null
-  }
-
-  return new Stripe(STRIPE_SECRET_KEY)
-}
-
 const getBaseUrl = () => process.env.CLIENT_URL || 'http://localhost:5173'
 
 const getOrganizationById = async (organizationId: string) => {
   const result = await pool.query(
-    'SELECT id, name, email, stripe_customer_id FROM organizations WHERE id = $1',
+    'SELECT id, name, email, billing_email, stripe_customer_id FROM organizations WHERE id = $1',
     [organizationId]
   )
   return result.rows[0] || null
+}
+
+const createNotification = async (
+  organizationId: string,
+  type: string,
+  message: string,
+  referenceId?: string,
+  payload?: Record<string, unknown>
+) => {
+  await notificationModel.create({
+    organization_id: organizationId,
+    type,
+    message,
+    reference_id: referenceId,
+    payload_json: payload || {},
+    read: false,
+  })
 }
 
 const updateOrganizationCustomer = async (organizationId: string, customerId: string) => {
@@ -58,12 +84,19 @@ const updateOrganizationCustomer = async (organizationId: string, customerId: st
 const upsertSubscriptionFromStripe = async (
   organizationId: string,
   providerCustomerId: string | null,
-  subscription: Stripe.Subscription
+  subscription: Stripe.Subscription,
+  planKey?: string
 ) => {
   const line = subscription.items.data[0]
   const priceId = line?.price?.id || null
   const currentPeriodStart = (line as any)?.current_period_start || null
   const currentPeriodEnd = (line as any)?.current_period_end || null
+  const resolvedPlanKey =
+    planKey ||
+    (subscription.metadata?.planKey as string) ||
+    (line?.price?.product as Stripe.Product)?.name ||
+    priceId ||
+    'stripe'
 
   await pool.query(
     `INSERT INTO organization_subscriptions (
@@ -115,7 +148,7 @@ const upsertSubscriptionFromStripe = async (
       organizationId,
       providerCustomerId,
       subscription.id,
-      priceId,
+      resolvedPlanKey,
       subscription.status,
       currentPeriodStart,
       currentPeriodEnd,
@@ -125,6 +158,36 @@ const upsertSubscriptionFromStripe = async (
       JSON.stringify(subscription.metadata || {}),
     ]
   )
+}
+
+const createStripeCustomerIfNeeded = async (stripe: Stripe, organizationId: string, org: any) => {
+  if (org.stripe_customer_id) {
+    return org.stripe_customer_id
+  }
+
+  const customer = await stripe.customers.create({
+    email: org.email || org.billing_email || 'billing@falaahun.org',
+    name: org.name,
+    metadata: { organizationId },
+  })
+
+  await updateOrganizationCustomer(organizationId, customer.id)
+  return customer.id
+}
+
+const processStripeSubscription = async (
+  stripe: Stripe,
+  organizationId: string,
+  subscriptionId: string,
+  planKey?: string
+) => {
+  const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+  const customerId = typeof subscription.customer === 'string' ? subscription.customer : subscription.customer?.id || null
+
+  if (!customerId) return
+
+  await updateOrganizationCustomer(organizationId, customerId)
+  await upsertSubscriptionFromStripe(organizationId, customerId, subscription, planKey)
 }
 
 export const getBillingStatus = async (req: Request, res: Response) => {
@@ -158,9 +221,11 @@ export const getBillingStatus = async (req: Request, res: Response) => {
           key,
           label:    cfg.label,
           amount:   cfg.amount,
-          currency: 'ZAR',
+          currency: 'USD',
         })),
-        sandbox: isSandbox(),
+        sandbox: getStripeMode() === 'sandbox' || isSandbox(),
+        stripeEnabled: !!STRIPE_SECRET_KEY,
+        stripeMode: getStripeMode(),
       },
     })
   } catch (error: any) {
@@ -231,6 +296,184 @@ export const createPayfastCheckout = async (req: Request, res: Response) => {
     })
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message })
+  }
+}
+
+export const createStripeCheckout = async (req: Request, res: Response) => {
+  try {
+    const organizationId = req.user?.organizationId
+    const { planKey, successUrl, cancelUrl } = req.body
+
+    if (!organizationId) {
+      return res.status(400).json({ success: false, error: 'Organization context is required' })
+    }
+
+    const plan = PLANS[planKey as string]
+    if (!plan) {
+      return res.status(400).json({ success: false, error: `Unknown plan: ${planKey}` })
+    }
+
+    const stripe = getStripe()
+    if (!stripe) {
+      return res.status(500).json({ success: false, error: 'Stripe is not configured. Set STRIPE_SECRET_KEY.' })
+    }
+
+    const orgResult = await pool.query(
+      'SELECT id, name, email, billing_email, stripe_customer_id FROM organizations WHERE id = $1',
+      [organizationId]
+    )
+    const org = orgResult.rows[0]
+    if (!org) {
+      return res.status(404).json({ success: false, error: 'Organization not found' })
+    }
+
+    const customerId = await createStripeCustomerIfNeeded(stripe, organizationId, org)
+    const session = await stripe.checkout.sessions.create({
+      customer: customerId,
+      payment_method_types: ['card'],
+      mode: 'subscription',
+      line_items: [
+        {
+          price_data: {
+            currency: STRIPE_CURRENCY,
+            product_data: {
+              name: plan.label,
+              metadata: { planKey },
+            },
+            recurring: { interval: 'month' },
+            unit_amount: Math.round(Number(plan.amount) * 100),
+          },
+          quantity: 1,
+        },
+      ],
+      success_url:
+        successUrl || `${process.env.CLIENT_URL || 'http://localhost:5173'}/billing?checkout=success`,
+      cancel_url:
+        cancelUrl || `${process.env.CLIENT_URL || 'http://localhost:5173'}/billing?checkout=cancel`,
+      metadata: {
+        organizationId,
+        planKey,
+      },
+    })
+
+    res.json({
+      success: true,
+      data: {
+        url: session.url,
+        sandbox: getStripeMode() === 'sandbox',
+      },
+    })
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message })
+  }
+}
+
+export const handleStripeWebhook = async (req: Request, res: Response) => {
+  try {
+    const stripe = getStripe()
+    if (!stripe || !STRIPE_WEBHOOK_SECRET) {
+      return res.status(500).json({ success: false, error: 'Stripe webhook is not configured.' })
+    }
+
+    const rawBody = (req as any).rawBody as Buffer | undefined
+    const signature = req.headers['stripe-signature'] as string | undefined
+    if (!rawBody || !signature) {
+      return res.status(400).json({ success: false, error: 'Missing webhook payload or signature' })
+    }
+
+    const event = stripe.webhooks.constructEvent(rawBody, signature, STRIPE_WEBHOOK_SECRET)
+
+    await pool.query(
+      `INSERT INTO webhook_events
+         (id, organization_id, provider, event_type, provider_reference, payload_json, processed)
+       VALUES (gen_random_uuid(), NULL, 'stripe', $1, $2, $3, true)
+       ON CONFLICT (provider, provider_reference) DO NOTHING`,
+      [event.type, event.id, JSON.stringify(event)]
+    )
+
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object as Stripe.Checkout.Session
+      const organizationId = session.metadata?.organizationId as string | undefined
+      const planKey = session.metadata?.planKey as string | undefined
+      const subscriptionId = session.subscription as string | undefined
+
+      if (organizationId && subscriptionId) {
+        await processStripeSubscription(stripe, organizationId, subscriptionId, planKey)
+        console.log(`[Stripe Webhook] checkout.session.completed processed: org=${organizationId}`)
+      }
+    }
+
+    if (event.type === 'invoice.payment_failed') {
+      const invoice = event.data.object as any
+      const subscriptionId = typeof invoice.subscription === 'string' ? invoice.subscription : invoice.subscription?.id
+      const customerId = typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id
+
+      if (customerId) {
+        const orgResult = await pool.query(
+          'SELECT id FROM organizations WHERE stripe_customer_id = $1',
+          [customerId]
+        )
+        const organizationId = orgResult.rows[0]?.id
+        if (organizationId) {
+          const message = `Stripe payment failed for subscription ${subscriptionId || 'unknown'}; donor payment stopped or requires action.`
+          await createNotification(organizationId, 'payment_failed', message, subscriptionId || undefined, {
+            event: event.type,
+            invoice_id: invoice.id,
+            subscription_id: subscriptionId,
+          })
+          console.log(`[Stripe Webhook] invoice.payment_failed: org=${organizationId}`)
+        }
+      }
+    }
+
+    if (
+      event.type === 'customer.subscription.updated' ||
+      event.type === 'customer.subscription.created' ||
+      event.type === 'customer.subscription.deleted'
+    ) {
+      const subscription = event.data.object as Stripe.Subscription
+      const customerId = typeof subscription.customer === 'string' ? subscription.customer : subscription.customer?.id
+      if (customerId) {
+        const orgResult = await pool.query(
+          'SELECT id FROM organizations WHERE stripe_customer_id = $1',
+          [customerId]
+        )
+        const organizationId = orgResult.rows[0]?.id
+        if (organizationId) {
+          await upsertSubscriptionFromStripe(
+            organizationId,
+            customerId,
+            subscription,
+            subscription.metadata?.planKey as string | undefined
+          )
+
+          if (event.type === 'customer.subscription.deleted') {
+            await createNotification(
+              organizationId,
+              'subscription_canceled',
+              `Stripe subscription ${subscription.id} was canceled. Donor payment has stopped.`,
+              subscription.id,
+              { event: event.type }
+            )
+          } else if (subscription.status === 'past_due' || subscription.status === 'unpaid') {
+            await createNotification(
+              organizationId,
+              'subscription_past_due',
+              `Stripe subscription ${subscription.id} is ${subscription.status}. Donor payment is delayed or failed.`,
+              subscription.id,
+              { status: subscription.status, event: event.type }
+            )
+          }
+
+          console.log(`[Stripe Webhook] subscription updated: org=${organizationId}`)
+        }
+      }
+    }
+
+    res.json({ received: true })
+  } catch (error: any) {
+    console.error('[Stripe Webhook] Error:', error.message)
+    res.status(400).json({ success: false, error: error.message })
   }
 }
 

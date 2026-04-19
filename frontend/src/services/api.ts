@@ -31,6 +31,20 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error?.response?.status
+    if (status === 401 || status === 403) {
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      localStorage.removeItem('organization')
+      window.location.href = '/'
+    }
+    return Promise.reject(error)
+  }
+)
+
 export const authService = {
   register: (email: string, password: string, name: string, organizationName: string) =>
     api.post('/auth/register', { email, password, name, organizationName }),
@@ -232,8 +246,16 @@ export const billingService = {
   createPayfastCheckout: (planKey: string, successUrl?: string, cancelUrl?: string) =>
     api.post('/billing/payfast/checkout', { planKey, successUrl, cancelUrl }),
 
+  createStripeCheckout: (planKey: string, successUrl?: string, cancelUrl?: string) =>
+    api.post('/billing/stripe/checkout', { planKey, successUrl, cancelUrl }),
+
   devSubscribe: (planKey: string) =>
     api.post('/billing/dev-subscribe', { planKey }),
+}
+
+export const notificationService = {
+  getAll: () => api.get('/notifications'),
+  markAsRead: (id: string) => api.put(`/notifications/${id}/read`),
 }
 
 export const paymentProfileService = {

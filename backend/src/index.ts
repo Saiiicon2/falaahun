@@ -16,6 +16,7 @@ import organizationRoutes from './routes/organizations'
 import pledgeRoutes from './routes/pledges'
 import billingRoutes from './routes/billing'
 import paymentProfileRoutes from './routes/paymentProfiles'
+import notificationRoutes from './routes/notifications'
 
 dotenv.config()
 
@@ -38,8 +39,14 @@ app.use(cors({
   credentials: true
 }))
 
-// Billing ITN endpoints are handled inside billingRoutes (no raw body needed for PayFast)
-app.use(express.json())
+// Capture raw body for Stripe webhook verification before JSON body parsing.
+app.use(express.json({
+  verify: (req, res, buf) => {
+    if (req.originalUrl && req.originalUrl.startsWith('/billing/stripe/webhook')) {
+      ;(req as any).rawBody = buf
+    }
+  },
+}))
 app.use(express.urlencoded({ extended: true }))
 
 // Static files for uploads
@@ -64,6 +71,7 @@ app.use('/organizations', organizationRoutes)
 app.use('/pledges', pledgeRoutes)
 app.use('/billing', billingRoutes)
 app.use('/payment-profiles', paymentProfileRoutes)
+app.use('/notifications', notificationRoutes)
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

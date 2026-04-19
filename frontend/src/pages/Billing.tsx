@@ -25,6 +25,8 @@ type BillingStatus = {
   }
   plans?: Plan[]
   sandbox?: boolean
+  stripeEnabled?: boolean
+  stripeMode?: string
 }
 
 // Descriptions & features keyed by plan key
@@ -100,16 +102,15 @@ function Billing() {
   }, [])
 
   /**
-   * Start PayFast checkout: get form fields from backend, build a hidden form,
-   * and submit it to the PayFast checkout URL. PayFast requires a POST.
+   * Start Stripe checkout: request a test sandbox session from the backend,
+   * then redirect the browser to Stripe's hosted checkout flow.
    */
   const startCheckout = async (planKey: string) => {
     try {
       setRedirecting(true)
       setError('')
 
-      // In sandbox mode, bypass PayFast and activate directly
-      if (isSandbox) {
+      if (isSandbox && !statusData.stripeEnabled) {
         await billingService.devSubscribe(planKey)
         setSuccess(`Sandbox: "${planKey}" plan activated instantly. Refresh to see your subscription.`)
         setRedirecting(false)
@@ -117,28 +118,14 @@ function Billing() {
         return
       }
 
-      const response = await billingService.createPayfastCheckout(
+      const response = await billingService.createStripeCheckout(
         planKey,
         `${window.location.origin}/billing?checkout=success`,
         `${window.location.origin}/billing?checkout=cancel`
       )
-      const { checkoutUrl, fields } = response.data.data
-      if (!checkoutUrl || !fields) throw new Error('Invalid checkout response from server')
-
-      // Build and auto-submit a hidden form (PayFast requires POST)
-      const form = document.createElement('form')
-      form.method  = 'POST'
-      form.action  = checkoutUrl
-      form.style.display = 'none'
-      Object.entries(fields as Record<string, string>).forEach(([name, value]) => {
-        const input = document.createElement('input')
-        input.type  = 'hidden'
-        input.name  = name
-        input.value = value
-        form.appendChild(input)
-      })
-      document.body.appendChild(form)
-      form.submit()
+      const sessionUrl = response.data.data?.url
+      if (!sessionUrl) throw new Error('Invalid Stripe checkout response from server')
+      window.location.href = sessionUrl
     } catch (err: any) {
       setError(err?.response?.data?.error || err?.message || 'Failed to start checkout')
       setRedirecting(false)
@@ -155,6 +142,7 @@ function Billing() {
   const subscription = statusData.subscription
   const activePlan   = subscription?.plan_key || 'No active plan'
   const isSandbox    = statusData.sandbox
+  const currencySymbol = statusData.plans?.[0]?.currency === 'USD' ? '$' : 'R'
 
   return (
     <div className="min-h-screen bg-background">
@@ -171,7 +159,12 @@ function Billing() {
       <div className="max-w-6xl mx-auto px-8 py-8 space-y-6">
         {isSandbox && (
           <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg text-sm text-amber-800 dark:text-amber-200">
-            <strong>Sandbox mode:</strong> Payments go to PayFast sandbox. Use test credentials to complete checkout. Set <code className="bg-amber-100 dark:bg-amber-900 px-1 py-0.5 rounded text-xs">PAYFAST_SANDBOX=false</code> on the backend to go live.
+            <strong>Sandbox mode:</strong>{' '}
+            {statusData.stripeEnabled ? (
+              <>Payments will use Stripe test mode. Use Stripe test keys in backend env to keep sandbox active.</>
+            ) : (
+              <>Stripe is not configured, so this page uses a development sandbox flow instead of live charges.</>
+            )}
           </div>
         )}
         {error && (
@@ -222,7 +215,7 @@ function Billing() {
 
         <div>
           <h2 className="text-lg font-semibold text-foreground mb-2">Choose a Plan</h2>
-          <p className="text-sm text-muted-foreground mb-4">All prices in ZAR (South African Rand). Billed monthly via PayFast.</p>
+          <p className="text-sm text-muted-foreground mb-4">All prices in USD. Billed monthly via Stripe test mode when sandbox is active.</p>
           {loading ? (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {Array.from({ length: 3 }).map((_, i) => (
@@ -248,7 +241,7 @@ function Billing() {
                 <CardHeader>
                   <CardDescription className="uppercase tracking-wide font-medium">{plan.key}</CardDescription>
                   <CardTitle className="text-3xl">
-                    R{plan.amount}<span className="text-base font-normal text-muted-foreground">/mo</span>
+                    {currencySymbol}{plan.amount}<span className="text-base font-normal text-muted-foreground">/mo</span>
                   </CardTitle>
                   <CardDescription>{plan.description}</CardDescription>
                 </CardHeader>
@@ -270,7 +263,9 @@ function Billing() {
                     variant={idx === 1 ? 'default' : 'outline'}
                   >
                     {redirecting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                    Subscribe via PayFast
+                    {isSandbox && !statusData.stripeEnabled
+                      ? 'Activate sandbox subscription'
+                      : 'Subscribe via Stripe'}
                   </Button>
                 </CardFooter>
               </Card>
