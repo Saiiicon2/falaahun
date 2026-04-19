@@ -41,9 +41,9 @@ app.use(cors({
 
 // Capture raw body for Stripe webhook verification before JSON body parsing.
 app.use(express.json({
-  verify: (req, res, buf) => {
+  verify: (req: any, res, buf) => {
     if (req.originalUrl && req.originalUrl.startsWith('/billing/stripe/webhook')) {
-      ;(req as any).rawBody = buf
+      req.rawBody = buf
     }
   },
 }))
